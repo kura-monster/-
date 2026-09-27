@@ -118,12 +118,14 @@ describe("Discord への接続", () => {
     assert.equal(await probeProxyTunnel("socks5://127.0.0.1:1080", "gateway.discord.gg", 443), "socks5: のプロキシは確認できません");
   });
 
-  it("起動ファイルは discord.js を読み込む前にプロキシを設定する（本体は後から読み込む）", () => {
+  it("起動ファイルは discord.js や Prisma を読み込む前に準備を済ませる（本体は後から読み込む）", () => {
     const staticImports = (file: string) =>
       [...fs.readFileSync(path.resolve(__dirname, "..", file), "utf8").matchAll(/^import\s[^;]*?from\s+"([^"]+)"|^import\s+"([^"]+)"/gm)].map((m) => m[1] ?? m[2]);
-    // Bun runs CommonJS packages before the importing module's own code, so anything more here would load discord.js too early.
-    assert.deepEqual(staticImports("src/index.ts"), ["./lib/network"]);
-    assert.ok(staticImports("src/lib/network.ts").every((name) => name.startsWith("node:")));
+    // Bun runs CommonJS packages before the importing module's own code, so anything more here would load them too early.
+    assert.deepEqual(staticImports("src/index.ts"), ["./lib/network", "./lib/prisma-generate"]);
+    for (const file of ["src/lib/network.ts", "src/lib/prisma-generate.ts"]) {
+      assert.ok(staticImports(file).every((name) => name.startsWith("node:")), file);
+    }
     assert.match(fs.readFileSync(path.resolve(__dirname, "../src/index.ts"), "utf8"), /import\("\.\/app"\)/);
   });
 });

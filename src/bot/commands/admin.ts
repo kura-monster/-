@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { prisma } from "../../lib/prisma";
 import { DomainError, fail } from "../../core/errors";
-import { POSITION_KEYS, POSITIONS, type PositionKey } from "../../core/positions";
+import { MEMBERS_ONLY_OFFICES, POSITION_KEYS, POSITIONS, type PositionKey } from "../../core/positions";
 import { roleTag } from "../../core/text";
 import {
   ADMIN_APPOINTABLE,
@@ -40,6 +40,7 @@ import {
 } from "../setup";
 import { COLOR, embed, field, limitLines, linkRow, mention, replyEmbed, withRelative } from "../ui";
 import { suggestBills } from "./autocomplete";
+import { ELECTION_TARGET_CHOICES, electionInputOf } from "./election";
 import { routeOf, type BotCommand } from "./types";
 
 const SETTING_OPTIONS: { option: string; key: SettingKey }[] = [
@@ -67,6 +68,14 @@ function withSettings(s: SlashCommandSubcommandBuilder): SlashCommandSubcommandB
   }
   return s;
 }
+
+/**
+ * Elections that make sense right after setting up: there are no representatives yet to stand for 首相・議長・副議長,
+ * and a ministry needs a portfolio that this option cannot take.
+ */
+const FIRST_ELECTION_CHOICES = ELECTION_TARGET_CHOICES.filter(
+  (choice) => choice.value !== "BY" && choice.value !== "MINISTER" && !MEMBERS_ONLY_OFFICES.includes(choice.value as PositionKey),
+);
 
 const billOption = (s: SlashCommandSubcommandBuilder, description: string) =>
   s.addIntegerOption((o) => o.setName("bill").setDescription(description).setRequired(true).setAutocomplete(true).setMinValue(1));
@@ -102,7 +111,12 @@ export const adminCommand: BotCommand = {
       s
         .setName("autosetup")
         .setDescription("オートセットアップ: チャンネル・権限・役職ロール・元首・案内をまとめて自動で設定する")
-        .addBooleanOption((o) => o.setName("first_election").setDescription("最初の総選挙もすぐに告示する（省略時はしない）")),
+        .addStringOption((o) =>
+          o
+            .setName("first_election")
+            .setDescription("最初に告示する選挙（省略すると告示しない）")
+            .addChoices(...FIRST_ELECTION_CHOICES),
+        ),
     )
     .addSubcommand((s) => s.setName("sync").setDescription("役職ロールを再作成し、全メンバーのロールを同期する"))
     .addSubcommand((s) => s.setName("diagnose").setDescription("Botの権限・ロール順位・チャンネル設定を診断する"))
@@ -261,9 +275,10 @@ export const adminCommand: BotCommand = {
             : "官報チャンネルが既存のため投稿していません";
 
         let election: string | null = null;
-        if (interaction.options.getBoolean("first_election")) {
+        const firstElection = interaction.options.getString("first_election");
+        if (firstElection) {
           try {
-            const started = await startElection(actor, { kind: "GENERAL" });
+            const started = await startElection(actor, electionInputOf(firstElection));
             election = `${started.title}を告示しました（立候補の締切: ${withRelative(started.registrationEndsAt)}）`;
           } catch (error) {
             if (!(error instanceof DomainError)) throw error;
@@ -288,7 +303,7 @@ export const adminCommand: BotCommand = {
           field(roleTag("元首"), sovereign),
           field("ロール同期", sync),
           field("はじめにの案内", welcome),
-          ...(election ? [field("総選挙", election)] : []),
+          ...(election ? [field("最初の選挙", election)] : []),
           field("診断", limitLines(checks)),
           field(
             "次のステップ",

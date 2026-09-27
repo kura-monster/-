@@ -211,6 +211,23 @@ export const CABINET_KEYS: PositionKey[] = ["PRIME_MINISTER", "DEPUTY_PRIME_MINI
 export const PRESIDING_KEYS: PositionKey[] = ["SPEAKER", "VICE_SPEAKER"];
 export const ELECTORAL_KEYS: PositionKey[] = ["ELECTION_COMMISSIONER", "ELECTION_COMMISSION_MEMBER"];
 export const JUDICIAL_KEYS: PositionKey[] = ["CHIEF_JUSTICE", "JUDGE"];
+
+/**
+ * Offices citizens can also fill by election, besides appointment or a vote in parliament.
+ * The admin faction (the server's own admins) and aides (a representative's personal pick) are left out.
+ */
+export const ELECTABLE_KEYS: PositionKey[] = POSITION_KEYS.filter((key) => POSITIONS[key].faction !== "ADMIN" && key !== "AIDE");
+/** Offices other than a seat in parliament that an office election can fill. */
+export const OFFICE_ELECTION_KEYS: PositionKey[] = ELECTABLE_KEYS.filter((key) => key !== "REPRESENTATIVE");
+/** As in the vote in parliament, only sitting representatives may stand for these. */
+export const MEMBERS_ONLY_OFFICES: PositionKey[] = ["PRIME_MINISTER", ...PRESIDING_KEYS];
+
+/** How an office is filled, including the office election where one is possible. */
+export function selectionText(key: PositionKey): string {
+  const def = POSITIONS[key];
+  if (!OFFICE_ELECTION_KEYS.includes(key)) return def.selection;
+  return `${def.selection}。市民による役職選挙でも選出${MEMBERS_ONLY_OFFICES.includes(key) ? "（候補は議員）" : ""}`;
+}
 export const ADMIN_FACTION_KEYS: PositionKey[] = ["SOVEREIGN", "ADMINISTRATOR"];
 
 export function isPositionKey(value: string): value is PositionKey {

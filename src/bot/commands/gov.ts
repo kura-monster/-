@@ -1,7 +1,7 @@
 import { InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { prisma } from "../../lib/prisma";
 import { GAZETTE_CATEGORY_LABEL, type GazetteCategory } from "../../core/constants";
-import { BRANCH_LABEL, FACTION_LABEL, POSITION_KEYS, POSITIONS, type PositionKey } from "../../core/positions";
+import { BRANCH_LABEL, FACTION_LABEL, POSITION_KEYS, POSITIONS, selectionText, type PositionKey } from "../../core/positions";
 import { roleTag } from "../../core/text";
 import { recentGazette } from "../../services/gazette";
 import { formatSetting, getGuild, SETTING_FIELDS, type SettingKey } from "../../services/guild";
@@ -88,7 +88,7 @@ export const govCommand: BotCommand = {
           body.addFields(
             field(
               `${def.rank}. ${roleTag(def.label)}`,
-              [branch === faction ? faction : `${faction}・${branch}`, `選出: ${def.selection}`, ...def.powers.map((p) => `・${p}`)].join("\n"),
+              [branch === faction ? faction : `${faction}・${branch}`, `選出: ${selectionText(key)}`, ...def.powers.map((p) => `・${p}`)].join("\n"),
             ),
           );
         }
@@ -101,7 +101,18 @@ export const govCommand: BotCommand = {
         const guild = await getGuild(prisma, actor.guildId);
         const show = (key: SettingKey) => `${SETTING_FIELDS[key].label}: **${formatSetting(key, guild[key])}**`;
         const body = embed(COLOR.government, `${guild.name}｜国の制度`).addFields(
-          field("選挙", [show("seats"), show("termDays"), show("registrationDays"), show("votingDays"), show("autoElection"), "当選には法定得票数（有効票÷定数×1/6）以上が必要。同数はくじ"].join("\n")),
+          field(
+            "選挙",
+            [
+              show("seats"),
+              show("termDays"),
+              show("registrationDays"),
+              show("votingDays"),
+              show("autoElection"),
+              "当選には法定得票数（有効票÷定数×1/6）以上が必要。同数はくじ",
+              "議員のほか、首相・議長・閣僚・裁判官・選挙管理委員なども役職選挙で選べます（`/election manage start`）",
+            ].join("\n"),
+          ),
           field(
             "国会",
             [

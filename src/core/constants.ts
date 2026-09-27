@@ -1,4 +1,4 @@
-export const ELECTION_KIND_LABEL = { GENERAL: "総選挙", BY: "補欠選挙" } as const;
+export const ELECTION_KIND_LABEL = { GENERAL: "総選挙", BY: "補欠選挙", OFFICE: "役職選挙" } as const;
 export type ElectionKind = keyof typeof ELECTION_KIND_LABEL;
 
 export const ELECTION_STATUS_LABEL = {

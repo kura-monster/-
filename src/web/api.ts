@@ -18,11 +18,11 @@ import {
   VOTE_CHOICE_LABEL,
   billStatusLabel,
 } from "../core/constants";
-import { BRANCH_LABEL, FACTION_LABEL, POSITION_KEYS, POSITIONS } from "../core/positions";
+import { BRANCH_LABEL, FACTION_LABEL, POSITION_KEYS, POSITIONS, selectionText } from "../core/positions";
 import { effectivePenalty, effectiveResult, effectiveRuling } from "../services/court-rules";
 import { caseDetail, listCases } from "../services/court";
 import { citizenGuilds, findCitizen } from "../services/citizen";
-import { castBallot, electionViewForVoter } from "../services/election";
+import { castBallot, electionOffice, electionViewForVoter } from "../services/election";
 import { recentGazette } from "../services/gazette";
 import { governmentOverview } from "../services/overview";
 import { billDetail, listBills } from "../services/parliament";
@@ -128,7 +128,7 @@ guildApi.get("/overview", async (req: Request<{ guildId: string }>, res) => {
         branch: def.branch,
         branchLabel: BRANCH_LABEL[def.branch],
         capacity: typeof def.capacity === "number" ? def.capacity : null,
-        selection: def.selection,
+        selection: selectionText(key),
         powers: def.powers,
         color: `#${def.color.toString(16).padStart(6, "0")}`,
       };
@@ -144,6 +144,7 @@ guildApi.get("/election", async (req: Request<{ guildId: string }>, res) => {
       id: current.election.id,
       title: current.election.title,
       kindLabel: label(ELECTION_KIND_LABEL, current.election.kind),
+      office: electionOffice(current.election).title,
       status: current.election.status,
       statusLabel: label(ELECTION_STATUS_LABEL, current.election.status),
       seats: current.election.seats,
@@ -158,6 +159,7 @@ guildApi.get("/election", async (req: Request<{ guildId: string }>, res) => {
     past: view.past.map((e) => ({
       title: e.title,
       kindLabel: label(ELECTION_KIND_LABEL, e.kind),
+      office: electionOffice(e).title,
       status: e.status,
       statusLabel: label(ELECTION_STATUS_LABEL, e.status),
       seats: e.seats,

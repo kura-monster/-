@@ -1,18 +1,19 @@
-import type { Candidate, Citizen, Election } from "@prisma/client";
+import type { Candidate, Citizen, Election, Guild } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { nextNumber, transact, type Db, type Tx } from "../core/db";
-import { fail } from "../core/errors";
+import { DomainError, fail } from "../core/errors";
 import type { DomainEvent } from "../core/events";
 import { ELECTION_KIND_LABEL, type ElectionKind } from "../core/constants";
-import { ELECTORAL_KEYS } from "../core/positions";
+import { ELECTORAL_KEYS, MEMBERS_ONLY_OFFICES, OFFICE_ELECTION_KEYS, POSITIONS, type PositionKey } from "../core/positions";
 import { decideWinners, secureRandom } from "../core/tally";
 import { addDays, timeToken } from "../core/time";
-import { cleanText } from "../core/text";
+import { cleanText, roleTag } from "../core/text";
+import { normalizeMinistryTitle } from "./cabinet";
 import { findCitizen, requireCitizen } from "./citizen";
 import { publish } from "./gazette";
 import { getGuild } from "./guild";
 import { lapsePendingBills } from "./parliament";
-import { appoint, checkEligibility, endPosition, holderOf, holds, isEligible } from "./positions";
+import { appoint, checkEligibility, endPosition, holderOf, holds } from "./positions";
 import type { Actor } from "./types";
 
 export const ACTIVE_ELECTION_STATUSES = ["REGISTRATION", "VOTING"];
@@ -34,10 +35,49 @@ async function electionManagerLabel(db: Db, actor: Actor): Promise<string> {
 
 export interface ElectionInput {
   kind: ElectionKind;
+  /** OFFICE: the office to fill. */
+  position?: PositionKey;
+  /** OFFICE for 国務大臣: the ministry, e.g. 外務. */
+  portfolio?: string;
+  /** OFFICE for offices with several holders (裁判官・選挙管理委員): how many to elect; all vacancies when omitted. */
+  seats?: number;
   title?: string;
   description?: string;
   registrationDays?: number;
   votingDays?: number;
+}
+
+/** Which office an election fills, under what title, and how many are elected. */
+export function electionOffice(election: Pick<Election, "position" | "positionTitle">): { key: PositionKey; title: string } {
+  const key = election.position as PositionKey;
+  return { key, title: election.positionTitle ?? POSITIONS[key].label };
+}
+
+/**
+ * An office election fills a single office by replacing whoever holds it (for 国務大臣, one ministry),
+ * or fills vacancies in an office with several holders.
+ */
+async function planOfficeElection(tx: Tx, guildId: string, input: ElectionInput) {
+  const key = input.position;
+  if (!key || !OFFICE_ELECTION_KEYS.includes(key)) fail("その役職は選挙で選べません。");
+  const def = POSITIONS[key];
+  if (typeof def.capacity !== "number") fail("その役職は選挙で選べません。");
+  if (key === "MINISTER") {
+    if (!cleanText(input.portfolio)) fail("国務大臣の選挙では担当分野（portfolio。例: 外務）を指定してください。");
+    const title = normalizeMinistryTitle(cleanText(input.portfolio) as string);
+    const ministries = await tx.position.findMany({ where: { guildId, key, endedAt: null } });
+    if (!ministries.some((m) => m.title === title) && ministries.length >= def.capacity) {
+      fail(`国務大臣は定員（${def.capacity}名）に達しているため、新しい大臣の選挙はできません。`);
+    }
+    return { key, title, seats: 1 };
+  }
+  if (def.capacity === 1) return { key, title: def.label, seats: 1 };
+  const held = await tx.position.count({ where: { guildId, key, endedAt: null } });
+  const vacancies = def.capacity - held;
+  if (vacancies <= 0) fail(`「${def.label}」は定員（${def.capacity}名）に達しているため、選挙で補う欠員がありません。`);
+  const seats = input.seats ?? vacancies;
+  if (!Number.isInteger(seats) || seats < 1 || seats > vacancies) fail(`選ぶ人数は 1〜${vacancies}名（欠員数）で指定してください。`);
+  return { key, title: def.label, seats };
 }
 
 export async function createElection(
@@ -53,20 +93,39 @@ export async function createElection(
   if (running) fail(`進行中の選挙（${running.title}）があります。確定または中止してから告示してください。`);
 
   let seats = guild.seats;
+  let office: { key: PositionKey; title: string } = { key: "REPRESENTATIVE", title: POSITIONS.REPRESENTATIVE.label };
   if (input.kind === "BY") {
     const seated = await tx.position.count({ where: { guildId, key: "REPRESENTATIVE", endedAt: null } });
     seats = guild.seats - seated;
     if (seats <= 0) fail(`欠員がないため補欠選挙は実施できません（定数 ${guild.seats}・現職 ${seated}）。`);
   }
+  if (input.kind === "OFFICE") {
+    const plan = await planOfficeElection(tx, guildId, input);
+    office = { key: plan.key, title: plan.title };
+    seats = plan.seats;
+  }
 
   const number = await nextNumber(tx, guildId, "election");
-  const title = cleanText(input.title) ?? `第${number}回 ${ELECTION_KIND_LABEL[input.kind]}`;
+  const name = input.kind === "OFFICE" ? `${office.title}選挙` : ELECTION_KIND_LABEL[input.kind];
+  const title = cleanText(input.title) ?? `第${number}回 ${name}`;
   const registrationEndsAt = addDays(now, input.registrationDays ?? guild.registrationDays);
   const votingEndsAt = addDays(registrationEndsAt, input.votingDays ?? guild.votingDays);
   const description = cleanText(input.description);
 
   const election = await tx.election.create({
-    data: { guildId, number, kind: input.kind, title, description, seats, registrationEndsAt, votingEndsAt, createdAt: now },
+    data: {
+      guildId,
+      number,
+      kind: input.kind,
+      position: office.key,
+      positionTitle: office.title === POSITIONS[office.key].label ? null : office.title,
+      title,
+      description,
+      seats,
+      registrationEndsAt,
+      votingEndsAt,
+      createdAt: now,
+    },
   });
   await publish(tx, events, guildId, {
     category: "ELECTION",
@@ -74,7 +133,8 @@ export async function createElection(
     body: [
       `${announcer}が${title}を告示しました。`,
       description ?? null,
-      `定数: ${seats}名`,
+      input.kind === "OFFICE" ? `選ぶ役職: ${roleTag(office.title)}（${seats}名）` : `定数: ${seats}名`,
+      MEMBERS_ONLY_OFFICES.includes(office.key) ? "立候補できるのは現職の議員です。" : null,
       `立候補受付: ${timeToken(registrationEndsAt)} まで（/election candidacy）`,
       `投票期間: ${timeToken(registrationEndsAt)} 〜 ${timeToken(votingEndsAt)}（Webで秘密投票）`,
     ]
@@ -99,14 +159,14 @@ export async function standForElection(actor: Actor, manifesto?: string, now: Da
     const election = await activeElection(tx, actor.guildId);
     if (!election) fail("現在、告示中の選挙はありません。");
     if (election.status !== "REGISTRATION" || now >= election.registrationEndsAt) fail("立候補の受付期間は終了しています。");
-    if (actor.isAdmin && !guild.allowAdminParticipation) {
-      fail("管理者派閥（Discord管理者）は立候補できません（/admin settings の admin_participation で許可できます）。");
+    const { key } = electionOffice(election);
+    if (actor.isAdmin && !guild.allowAdminParticipation && POSITIONS[key].faction === "REPRESENTATIVE") {
+      fail("管理者派閥（Discord管理者）は国民代表派閥の役職に立候補できません（/admin settings の admin_participation で許可できます）。");
     }
     if (election.kind === "BY" && (await holds(tx, actor.guildId, citizen.id, "REPRESENTATIVE"))) {
       fail("現職の議員は補欠選挙に立候補できません。");
     }
-    // Sitting representatives may seek re-election; an aide resigns automatically on winning.
-    await checkEligibility(tx, guild, citizen, "REPRESENTATIVE", { ignoreKeys: ["REPRESENTATIVE", "AIDE"] });
+    await checkCandidate(tx, guild, election, citizen);
 
     const existing = await tx.candidate.findUnique({
       where: { electionId_citizenId: { electionId: election.id, citizenId: citizen.id } },
@@ -150,7 +210,52 @@ export async function withdrawCandidacy(actor: Actor, now: Date = new Date()) {
 
 type CandidateWithCitizen = Candidate & { citizen: Citizen };
 
-async function seatWinners(tx: Tx, events: DomainEvent[], election: Election, winners: CandidateWithCitizen[], now: Date) {
+/** Seats the winners of an office election. Returns notes for the gazette. */
+async function seatOfficeWinners(tx: Tx, events: DomainEvent[], election: Election, winners: CandidateWithCitizen[], now: Date): Promise<string[]> {
+  const { key, title } = electionOffice(election);
+  const def = POSITIONS[key];
+  const replaces = def.capacity === 1 || key === "MINISTER";
+  const notes: string[] = [];
+  for (const winner of winners) {
+    if (replaces) {
+      const incumbents = await tx.position.findMany({
+        where: { guildId: election.guildId, key, endedAt: null, ...(key === "MINISTER" ? { title } : {}) },
+        include: { citizen: true },
+      });
+      if (incumbents.some((p) => p.citizenId === winner.citizenId)) {
+        notes.push(`${winner.citizen.displayName} が引き続き ${roleTag(title)} を務めます。`);
+        continue;
+      }
+      for (const incumbent of incumbents) {
+        await endPosition(tx, events, incumbent.id, "選挙による交代", now);
+        notes.push(`${incumbent.citizen.displayName} は ${roleTag(title)} を退任しました。`);
+        if (key === "PRIME_MINISTER") {
+          await publish(tx, events, election.guildId, {
+            category: "CABINET",
+            title: `${incumbent.citizen.displayName}内閣 総辞職`,
+            body: `${election.title}の結果を受けて内閣は総辞職しました。新しい${roleTag("内閣総理大臣")}は /cabinet appoint で閣僚を任命できます。`,
+          });
+        }
+      }
+    }
+    if (key === "MINISTER") {
+      const other = await tx.position.findFirst({ where: { citizenId: winner.citizenId, key, endedAt: null } });
+      if (other) await endPosition(tx, events, other.id, `${title}への就任に伴う退任`, now);
+    }
+    if (!replaces && typeof def.capacity === "number") {
+      const held = await tx.position.count({ where: { guildId: election.guildId, key, endedAt: null } });
+      if (held >= def.capacity) {
+        notes.push(`${winner.citizen.displayName} は、選挙中に定員（${def.capacity}名）が埋まったため就任できませんでした。`);
+        continue;
+      }
+    }
+    await appoint(tx, events, { guildId: election.guildId, citizenId: winner.citizenId, key, title, source: "ELECTION", now });
+  }
+  return notes;
+}
+
+async function seatWinners(tx: Tx, events: DomainEvent[], election: Election, winners: CandidateWithCitizen[], now: Date): Promise<string[]> {
+  if (election.kind === "OFFICE") return seatOfficeWinners(tx, events, election, winners, now);
   const guild = await getGuild(tx, election.guildId);
   let expiresAt: Date;
 
@@ -189,6 +294,22 @@ async function seatWinners(tx: Tx, events: DomainEvent[], election: Election, wi
       now,
     });
   }
+  return [];
+}
+
+/**
+ * Whether a citizen may stand (checked again when the votes are counted). Holders of a single office or ministry may
+ * seek re-election, and holding what the win replaces is fine: an aide leaves on winning a seat, a minister moves
+ * ministries. Offices with several holders only fill vacancies, so their holders cannot stand.
+ */
+async function checkCandidate(db: Db, guild: Guild, election: Election, citizen: Citizen): Promise<void> {
+  const { key } = electionOffice(election);
+  if (MEMBERS_ONLY_OFFICES.includes(key) && !(await holds(db, guild.id, citizen.id, "REPRESENTATIVE"))) {
+    fail(`${POSITIONS[key].label}に立候補できるのは現職の議員だけです。`);
+  }
+  const replaces = POSITIONS[key].capacity === 1 || key === "MINISTER";
+  const ignoreKeys: PositionKey[] = key === "REPRESENTATIVE" ? ["REPRESENTATIVE", "AIDE"] : replaces ? [key] : [];
+  await checkEligibility(db, guild, citizen, key, { ignoreKeys });
 }
 
 /** Candidates who left, were revoked, or took an incompatible office during the campaign cannot be seated. */
@@ -201,8 +322,12 @@ async function eligibleCandidates(tx: Tx, election: Election): Promise<Candidate
   });
   const eligible: CandidateWithCitizen[] = [];
   for (const candidate of candidates) {
-    if (candidate.citizen.active && (await isEligible(tx, guild, candidate.citizen, "REPRESENTATIVE", ["REPRESENTATIVE", "AIDE"]))) {
+    if (!candidate.citizen.active) continue;
+    try {
+      await checkCandidate(tx, guild, election, candidate.citizen);
       eligible.push(candidate);
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
     }
   }
   return eligible;
@@ -232,7 +357,7 @@ export async function closeRegistration(guildId: string, electionId: string, now
 
     if (candidates.length <= election.seats) {
       await tx.candidate.updateMany({ where: { id: { in: candidates.map((c) => c.id) } }, data: { elected: true } });
-      await seatWinners(tx, events, election, candidates, now);
+      const notes = await seatWinners(tx, events, election, candidates, now);
       const updated = await tx.election.update({
         where: { id: election.id },
         data: { status: "COMPLETED", decidedAt: now, registrationEndsAt, votingEndsAt: now },
@@ -244,7 +369,10 @@ export async function closeRegistration(guildId: string, electionId: string, now
         body: [
           `立候補者が定数（${election.seats}名）以下のため、投票を行わずに当選が確定しました。`,
           ...candidates.map((c) => `当選　${c.citizen.displayName}`),
-          vacancies > 0 ? `欠員: ${vacancies}名（/election manage start で補欠選挙を実施できます）` : null,
+          ...notes,
+          vacancies > 0
+            ? `欠員: ${vacancies}名${election.kind === "OFFICE" ? "" : "（/election manage start で補欠選挙を実施できます）"}`
+            : null,
         ]
           .filter(Boolean)
           .join("\n"),
@@ -310,7 +438,7 @@ export async function finalizeElection(guildId: string, electionId: string, now:
     for (const candidate of allCandidates) {
       await tx.candidate.update({ where: { id: candidate.id }, data: { voteCount: votesOf(candidate.id), elected: winnerIds.has(candidate.id) } });
     }
-    await seatWinners(tx, events, election, eligible.filter((c) => winnerIds.has(c.id)), now);
+    const notes = await seatWinners(tx, events, election, eligible.filter((c) => winnerIds.has(c.id)), now);
 
     const updated = await tx.election.update({
       where: { id: electionId },
@@ -332,9 +460,10 @@ export async function finalizeElection(guildId: string, electionId: string, now:
           const mark = winnerIds.has(c.id) ? "当選" : "落選";
           return `${mark}　${c.citizen.displayName}　${votesOf(c.id)}票${eligibleIds.has(c.id) ? "" : "（失格）"}`;
         }),
+        ...notes,
         decision.lotteryUsed ? "※最下位当選者が得票同数のため、くじにより当選人を決定しました。" : null,
         decision.unfilledSeats > 0
-          ? `※法定得票数（${decision.minVotes.toFixed(2)}票）以上の候補者が不足したため、${decision.unfilledSeats}議席が欠員となりました。`
+          ? `※法定得票数（${decision.minVotes.toFixed(2)}票）以上の候補者が不足したため、${decision.unfilledSeats}${election.kind === "OFFICE" ? "名" : "議席"}が欠員となりました。`
           : null,
       ]
         .filter(Boolean)

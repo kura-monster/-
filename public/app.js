@@ -442,7 +442,9 @@ function currentElection(guildId, e, viewer, reload) {
     h(
       "p",
       { class: "muted" },
-      `定数 ${e.seats}名 ・ 候補者 ${e.candidates.length}名`,
+      "選ぶ役職 ",
+      roleTag(e.office),
+      ` ${e.seats}名 ・ 候補者 ${e.candidates.length}名`,
       e.status === "VOTING" ? ` ・ 投票者 ${e.turnout}名（得票は開票まで非公開）` : "",
     ),
   );
@@ -525,7 +527,13 @@ function pastElection(e) {
     e.status === "CANCELLED"
       ? h("p", { class: "muted" }, `中止: ${e.cancelReason ?? "記載なし"}`)
       : [
-          h("p", { class: "muted small" }, `投票者 ${e.turnout}名 ・ 定数 ${e.seats}名${e.decidedAt ? ` ・ ${fmt(e.decidedAt)} 確定` : ""}`),
+          h(
+            "p",
+            { class: "muted small" },
+            "選ぶ役職 ",
+            roleTag(e.office),
+            ` ${e.seats}名 ・ 投票者 ${e.turnout}名${e.decidedAt ? ` ・ ${fmt(e.decidedAt)} 確定` : ""}`,
+          ),
           h(
             "ol",
             { class: "results" },

@@ -120,7 +120,7 @@ describe("オートセットアップ（/admin autosetup）", () => {
   });
 
   it("1回で、カテゴリー・4チャンネル（権限つき）・役職ロール・元首・案内・総選挙まで設定する", async () => {
-    const reply = await run(admin, "admin", "autosetup", { first_election: true }, { guild: discord.guild });
+    const reply = await run(admin, "admin", "autosetup", { first_election: "GENERAL" }, { guild: discord.guild });
     assert.equal(reply.error, false, reply.text);
     assert.match(reply.text, /オートセットアップ/);
     assert.match(reply.text, new RegExp(`カテゴリー: ${CATEGORY_NAME.replace(/[{}]/g, "\\$&")}（作成）`));

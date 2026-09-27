@@ -123,6 +123,10 @@ model Election {
   guildId            String
   number             Int
   kind               String
+  // The office being filled: REPRESENTATIVE for general and by-elections, another office for an office election.
+  position           String        @default("REPRESENTATIVE")
+  // Title the winner takes, e.g. 外務大臣 (null means the office's own label).
+  positionTitle      String?
   title              String
   description        String?
   seats              Int

@@ -58,7 +58,7 @@ const SECTIONS: Section[] = [
   {
     title: `選挙管理委員会（${roleTag("選挙管理委員長")}・${roleTag("選挙管理委員")}）`,
     holders: ELECTORAL_KEYS,
-    lines: ["`/election manage start | advance | cancel` 選挙の告示・進行・中止（管理者も可）"],
+    lines: ["`/election manage start | advance | cancel` 選挙の告示・進行・中止（管理者も可）。`kind` で総選挙・補欠選挙・役職選挙を選ぶ"],
   },
   {
     title: "管理者専用（/admin はDiscordの管理者にだけ表示されます）",
