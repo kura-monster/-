@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
+import net, { type AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import { DiscordjsErrorCodes, Events, type Client } from "discord.js";
 import { connectionStage, loginErrorHint, watchConnection } from "../src/bot/connection";
 import { cleanSecret } from "../src/config";
+import { describeProxy, probeGateway, proxyFor, routeWebSocketsThroughProxy } from "../src/lib/network";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -63,5 +65,40 @@ describe("Discord への接続", () => {
     assert.equal(cleanSecret("abc\n"), "abc");
     assert.equal(cleanSecret(undefined), "");
     assert.equal(cleanSecret(`"abc'`), `"abc'`);
+  });
+
+  it("HTTPS_PROXY などのプロキシ設定を、NO_PROXY の除外も含めて読む", () => {
+    const host = "gateway.discord.gg";
+    assert.equal(proxyFor(host, {}), null);
+    assert.equal(proxyFor(host, { HTTPS_PROXY: "http://proxy.local:3128" }), "http://proxy.local:3128");
+    assert.equal(proxyFor(host, { https_proxy: "http://lower.local:3128" }), "http://lower.local:3128");
+    assert.equal(proxyFor(host, { HTTP_PROXY: "http://plain.local:8080" }), "http://plain.local:8080");
+    for (const bypass of ["*", "discord.gg", ".discord.gg", "*.discord.gg", "gateway.discord.gg:443", "example.com, .discord.gg"]) {
+      assert.equal(proxyFor(host, { HTTPS_PROXY: "http://proxy.local:3128", NO_PROXY: bypass }), null, bypass);
+    }
+    assert.equal(proxyFor(host, { HTTPS_PROXY: "http://p", no_proxy: "discord.gg" }), null);
+    assert.equal(proxyFor(host, { HTTPS_PROXY: "http://p", NO_PROXY: "notdiscord.gg,example.com" }), "http://p");
+  });
+
+  it("ログに出すプロキシのURLから認証情報を取り除く", () => {
+    assert.equal(describeProxy("http://user:secret@proxy.local:3128"), "http://proxy.local:3128");
+    assert.equal(describeProxy("not a url"), "（URLの形式ではありません）");
+  });
+
+  it("WebSocket をプロキシ経由にするのは Bun のときだけ（Node.js では何も変えない）", () => {
+    const before = globalThis.WebSocket;
+    assert.equal(routeWebSocketsThroughProxy({ HTTPS_PROXY: "http://proxy.local:3128" }), null);
+    assert.equal(globalThis.WebSocket, before);
+  });
+
+  it("接続できないときのネットワーク確認で、直接接続の結果を示す", async () => {
+    const probe = net.createServer().listen(0, "127.0.0.1");
+    await once(probe, "listening");
+    const { port } = probe.address() as AddressInfo;
+    await new Promise((resolve) => probe.close(resolve));
+    const lines = await probeGateway("localhost", port, 1000);
+    assert.match(lines[0], /^プロキシ: /);
+    assert.ok(lines.some((line) => /^DNS: localhost → .*127\.0\.0\.1/.test(line)), lines.join("\n"));
+    assert.ok(lines.some((line) => /^直接接続 IPv4（127\.0\.0\.1）: 接続できません（ECONNREFUSED）$/.test(line)), lines.join("\n"));
   });
 });

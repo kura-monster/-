@@ -1,8 +1,10 @@
+import { webSocketProxy } from "./lib/network-setup";
 import fs from "node:fs";
 import { config } from "./config";
 import { createBot } from "./bot/client";
 import { loginErrorHint, watchConnection } from "./bot/connection";
 import { attachDiscordEffects } from "./bot/effects";
+import { describeProxy } from "./lib/network";
 import { databaseFile, findSchemaProblem, pushSchema } from "./lib/prisma";
 import { startScheduler } from "./services/scheduler";
 import { createWebApp } from "./web/server";
@@ -70,7 +72,7 @@ async function main(): Promise<void> {
   const client = createBot(() => startScheduler());
   attachDiscordEffects(client);
   watchConnection(client);
-  console.log("[民主主義Bot] Discord に接続しています…");
+  console.log(`[民主主義Bot] Discord に接続しています…${webSocketProxy ? `（プロキシ ${describeProxy(webSocketProxy)} 経由）` : ""}`);
   try {
     await client.login(config.discordToken);
   } catch (error) {

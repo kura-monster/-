@@ -150,6 +150,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 - **ポート**: ホスティングが渡す `PORT` / `SERVER_PORT` を自動で使います。ドメインの転送先が別のポートなら `WEB_PORT` で指定します。起動ログの「ポート ○○ で待ち受け中・（読み取った変数）」で確認できます
 - `WEB_BASE_URL` が `https://` なら、プロキシの `X-Forwarded-Proto` を信頼する設定（`TRUST_PROXY`）が自動で有効になり、ログインCookieに Secure 属性が付きます（プロキシが HTTPS を伝えない場合もログインはでき、ログに `[注意]` が出ます）
 - `NODE_ENV=production` では `SESSION_SECRET` が必須です
+- ホスティングが `HTTPS_PROXY` などのプロキシを設定している場合、Bun では Discord への WebSocket 接続もそのプロキシを経由させます（Bun の WebSocket は環境変数のプロキシ設定を使わないため、そのままでは Bot がオフラインのままになります）
 - GitHub から取り込み直したあとに起動ログへ「データベース: …（新しく作成しました）」と出た場合は、取り込みでデータベースファイルが消えています。`DATABASE_URL` を取り込み先の外のファイル（例: `file:/絶対パス/democracy.db`）にしてください
 
 | 症状 | 確認すること |
@@ -157,7 +158,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 | Cloudflare の **502 Bad gateway** | 起動ログのポートが、ドメイン（ホスティングの転送設定や Cloudflare Tunnel）の転送先ポートと同じか。`[エラー] ポート ○○ は別のプログラムが使用中` が出ていないか |
 | Discord の画面に「Invalid OAuth2 redirect_uri」 | Developer Portal の OAuth2 → Redirects に `WEB_BASE_URL/auth/callback` を完全一致で登録したか |
 | 「ログインの検証に失敗しました」 | サイトを `WEB_BASE_URL` と同じドメインで開いているか（IPアドレスや別のドメインで開くとCookieが届きません） |
-| Bot がオンラインにならない | 起動ログの `[エラー]` 行を確認。トークン・SERVER MEMBERS INTENT・ログイン回数の上限は、原因と対処法をすぐ表示します。45秒たっても接続が終わらない場合は、直近の接続ログと、止まっている段階（Discord の API／ゲートウェイ／ログイン）を表示します |
+| Bot がオンラインにならない | 起動ログの `[エラー]` 行を確認。トークン・SERVER MEMBERS INTENT・ログイン回数の上限は、原因と対処法をすぐ表示します。45秒たっても接続が終わらない場合は、直近の接続ログと、止まっている段階（Discord の API／ゲートウェイ／ログイン）、このサーバーのネットワーク（プロキシ設定・DNS・直接接続できるか）を表示します |
 | 起動ログに `DISCORD_TOKEN が未設定` や `http://localhost:3000` | 設定が読み込まれていない。GitHub から取り込むと `.env` は消えるので、管理画面の環境変数に設定する |
 | 起動ログに `[エラー] データベースの構造が最新ではありません` | データが消える変更が必要。データベースファイルをバックアップしてから `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
 

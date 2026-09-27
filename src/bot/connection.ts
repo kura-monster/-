@@ -1,9 +1,10 @@
 import { DiscordjsErrorCodes, Events, type Client } from "discord.js";
+import { probeGateway } from "../lib/network";
 
 interface WatchOptions {
   reportAfterMs?: number;
   repeatEveryMs?: number;
-  report?: (lines: string[]) => void;
+  report?: (lines: string[]) => unknown;
 }
 
 const KEEP_LINES = 30;
@@ -25,10 +26,17 @@ const STAGE_HINT: Record<Stage, string> = {
     "ログイン要求に Discord が応答していません。数分待ってから再起動し、続く場合は Developer Portal の Bot ページでトークンを再発行（Reset Token）して DISCORD_TOKEN を設定し直してください。",
 };
 
-function defaultReport(lines: string[]): void {
+async function defaultReport(lines: string[]): Promise<void> {
+  const stage = connectionStage(lines);
+  // Checked before printing so the report comes out in one piece.
+  const network = stage === "api" || stage === "gateway" ? await probeGateway().catch((error) => [`（ネットワークの確認に失敗: ${String(error)}）`]) : [];
   console.error("[エラー] Discord への接続が完了していません（Bot はオフラインのままです）。直近の接続ログ:");
   for (const line of lines.slice(-12)) console.error(`  ${line}`);
-  console.error(`[エラー] ${STAGE_HINT[connectionStage(lines)]}`);
+  if (network.length > 0) {
+    console.error("[エラー] このサーバーのネットワーク:");
+    for (const line of network) console.error(`  ${line}`);
+  }
+  console.error(`[エラー] ${STAGE_HINT[stage]}`);
 }
 
 /**
@@ -49,8 +57,8 @@ export function watchConnection(client: Client, options: WatchOptions = {}): voi
   client.on(Events.Error, (error) => console.error("[Discord]", error));
   client.on(Events.ShardError, (error, shardId) => console.error(`[Discord] 接続エラー（シャード ${shardId}）: ${error.message}`));
 
-  const first = setTimeout(() => report([...recent]), reportAfterMs);
-  const repeat = setInterval(() => report([...recent]), repeatEveryMs);
+  const first = setTimeout(() => void report([...recent]), reportAfterMs);
+  const repeat = setInterval(() => void report([...recent]), repeatEveryMs);
   first.unref();
   repeat.unref();
   client.once(Events.ClientReady, () => {
