@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { config } from "../config";
 
 export interface WebUser {
@@ -53,6 +53,18 @@ async function fetchDiscordUser(code: string): Promise<WebUser> {
   return { id: user.id, username: user.username, globalName: user.global_name ?? null, avatar: user.avatar ?? null };
 }
 
+let warnedInsecureCookie = false;
+
+function warnIfCookieInsecure(req: Request): void {
+  if (warnedInsecureCookie || req.secure || !config.webBaseUrl.startsWith("https://")) return;
+  warnedInsecureCookie = true;
+  console.warn(
+    config.trustProxy
+      ? "[注意] プロキシから HTTPS であること（X-Forwarded-Proto: https）が届いていないため、ログインCookieに Secure 属性を付けていません。"
+      : "[注意] TRUST_PROXY=false のため HTTPS 接続を判別できず、ログインCookieに Secure 属性を付けていません。TRUST_PROXY の行を削除するか true にしてください。",
+  );
+}
+
 export const authRouter = Router();
 
 authRouter.get("/login", (req, res, next) => {
@@ -60,6 +72,7 @@ authRouter.get("/login", (req, res, next) => {
     res.status(503).type("text/plain; charset=utf-8").send("Discordログインが設定されていません（DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET）。");
     return;
   }
+  warnIfCookieInsecure(req);
   const state = crypto.randomBytes(24).toString("hex");
   req.session.oauthState = state;
   req.session.returnTo = safeReturnTo(req.query.returnTo);

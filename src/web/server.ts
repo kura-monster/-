@@ -46,7 +46,9 @@ export function createWebApp(): express.Express {
       cookie: {
         httpOnly: true,
         sameSite: "lax",
-        secure: config.webBaseUrl.startsWith("https://"),
+        // Secure whenever the request arrived over HTTPS (behind a proxy: X-Forwarded-Proto). A plain `true` would
+        // silently drop the cookie when the proxy does not say so, and login would fail; /auth/login warns instead.
+        secure: config.webBaseUrl.startsWith("https://") ? "auto" : false,
         maxAge: 7 * DAY,
       },
     }),

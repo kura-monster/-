@@ -106,7 +106,7 @@ Discord でログインすると、市民登録している国の **政府・選
 ### 1. Discord Developer Portal
 1. [Developer Portal](https://discord.com/developers/applications) でアプリケーションを作成
 2. **Bot** ページでトークンを発行し、**SERVER MEMBERS INTENT** を有効化（必須）
-3. **OAuth2** ページで Client Secret を取得し、Redirects に `WEB_BASE_URL/auth/callback`（例: `http://localhost:3000/auth/callback`）を追加
+3. **OAuth2** ページで Client Secret を取得し、Redirects に `WEB_BASE_URL/auth/callback`（例: `http://localhost:3000/auth/callback`、公開時は `https://democracy.example.com/auth/callback`）を追加
 
 ### 2. 環境変数
 ```bash
@@ -143,9 +143,20 @@ npm run dev              # Bot + Web + スケジューラを起動
 | {`副議長`} {`最高裁判所長官`} {`裁判官`} | スレッド管理 |
 | その他・{`市民`} | なし |
 
-### 本番運用
-- `npm run build && npm start` で起動（`NODE_ENV=production` では `SESSION_SECRET` が必須）
-- HTTPS のリバースプロキシの後ろで動かす場合は `TRUST_PROXY=true`
+### 本番運用（ホスティング・Cloudflare）
+- 起動方法: Node.js なら `npm run build && npm start`、Bun なら `bun install` → `bunx prisma db push` → `bun src/index.ts`（コマンド登録は `bun src/bot/deploy-commands.ts`）
+- `WEB_BASE_URL` には公開URL（`https://democracy.example.com`）を設定します。`https://` を省略した場合は補います
+- **ポート**: ホスティングが渡す `PORT` / `SERVER_PORT` を自動で使います。ドメインの転送先が別のポートなら `WEB_PORT` で指定します。起動ログの「ポート ○○ で待ち受け中・（読み取った変数）」で確認できます
+- `WEB_BASE_URL` が `https://` なら、プロキシの `X-Forwarded-Proto` を信頼する設定（`TRUST_PROXY`）が自動で有効になり、ログインCookieに Secure 属性が付きます（プロキシが HTTPS を伝えない場合もログインはでき、ログに `[注意]` が出ます）
+- `NODE_ENV=production` では `SESSION_SECRET` が必須です
+- 起動時にデータベースを確認し、未作成・古い構造なら `prisma db push` を案内して停止します
+
+| 症状 | 確認すること |
+|---|---|
+| Cloudflare の **502 Bad gateway** | 起動ログのポートが、ドメイン（ホスティングの転送設定や Cloudflare Tunnel）の転送先ポートと同じか。`[エラー] ポート ○○ は別のプログラムが使用中` が出ていないか |
+| Discord の画面に「Invalid OAuth2 redirect_uri」 | Developer Portal の OAuth2 → Redirects に `WEB_BASE_URL/auth/callback` を完全一致で登録したか |
+| 「ログインの検証に失敗しました」 | サイトを `WEB_BASE_URL` と同じドメインで開いているか（IPアドレスや別のドメインで開くとCookieが届きません） |
+| 起動ログに `[エラー] データベースが作成されていないか…` | Bot を止めて `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
 
 ### v1 からの更新
 データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除してから `npm run db:push` を実行し、`npm run deploy-commands` でコマンドを登録し直してください（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。

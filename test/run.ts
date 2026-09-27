@@ -10,3 +10,4 @@ import "./scheduler.test";
 import "./commands.test";
 import "./web.test";
 import "./effects.test";
+import "./deploy.test";
