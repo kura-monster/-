@@ -1,4 +1,5 @@
 import dns from "node:dns/promises";
+import net from "node:net";
 import tls from "node:tls";
 
 type Env = Record<string, string | undefined>;
@@ -64,10 +65,55 @@ function tryTls(address: string, servername: string, port: number, timeoutMs: nu
   });
 }
 
-/** What this host's network does with the gateway: proxy settings, DNS, and a direct TLS connection per IP version. */
+/** Asks the proxy for the same tunnel Bun's WebSocket does (CONNECT host:port), then opens TLS inside it. */
+export function probeProxyTunnel(proxy: string, host: string, port: number, timeoutMs = 5000): Promise<string> {
+  let url: URL;
+  try {
+    url = new URL(proxy);
+  } catch {
+    return Promise.resolve("プロキシのURLを読み取れません");
+  }
+  if (url.protocol !== "http:") return Promise.resolve(`${url.protocol} のプロキシは確認できません`);
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const socket = net.connect({ host: url.hostname, port: Number(url.port) || 80, timeout: timeoutMs });
+    let settled = false;
+    const done = (result: string) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(result);
+    };
+    socket.once("timeout", () => done(`${timeoutMs / 1000}秒たっても応答がありません`));
+    socket.once("error", (error: NodeJS.ErrnoException) => done(`プロキシに接続できません（${error.code ?? error.message}）`));
+    socket.once("connect", () => {
+      const credentials = url.username ? `${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}` : "";
+      const auth = credentials ? `Proxy-Authorization: Basic ${Buffer.from(credentials).toString("base64")}\r\n` : "";
+      socket.write(`CONNECT ${host}:${port} HTTP/1.1\r\nHost: ${host}:${port}\r\n${auth}\r\n`);
+    });
+    let head = "";
+    const onData = (chunk: Buffer) => {
+      head += chunk.toString("latin1");
+      if (!head.includes("\r\n\r\n")) return;
+      socket.off("data", onData);
+      const status = head.slice(0, head.indexOf("\r\n"));
+      if (!/^HTTP\/1\.[01] 2\d\d/.test(status)) return done(`プロキシが拒否しました（${status}）`);
+      const secure = tls.connect({ socket, servername: host });
+      secure.once("secureConnect", () => done(`接続できます（${Date.now() - started}ms）`));
+      secure.once("error", (error: NodeJS.ErrnoException) => done(`トンネル内の TLS に失敗しました（${error.code ?? error.message}）`));
+    };
+    socket.on("data", onData);
+  });
+}
+
+/**
+ * What this host's network does with the gateway: the proxy (and whether it opens a tunnel to the gateway),
+ * DNS, and a direct TLS connection per IP version.
+ */
 export async function probeGateway(host = GATEWAY_HOST, port = 443, timeoutMs = 5000): Promise<string[]> {
   const proxy = proxyFor(host);
   const lines = [proxy ? `プロキシ: ${describeProxy(proxy)}（WebSocket もこのプロキシを経由）` : "プロキシ: 設定なし"];
+  if (proxy) lines.push(`プロキシ経由（CONNECT ${host}:${port}）: ${await probeProxyTunnel(proxy, host, port, timeoutMs)}`);
   let addresses: { address: string; family: number }[];
   try {
     addresses = await dns.lookup(host, { all: true });

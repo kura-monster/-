@@ -5,7 +5,9 @@ import { describe, it } from "node:test";
 import { DiscordjsErrorCodes, Events, type Client } from "discord.js";
 import { connectionStage, loginErrorHint, watchConnection } from "../src/bot/connection";
 import { cleanSecret } from "../src/config";
-import { describeProxy, probeGateway, proxyFor, routeWebSocketsThroughProxy } from "../src/lib/network";
+import fs from "node:fs";
+import path from "node:path";
+import { describeProxy, probeGateway, probeProxyTunnel, proxyFor, routeWebSocketsThroughProxy } from "../src/lib/network";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -100,5 +102,28 @@ describe("Discord への接続", () => {
     assert.match(lines[0], /^プロキシ: /);
     assert.ok(lines.some((line) => /^DNS: localhost → .*127\.0\.0\.1/.test(line)), lines.join("\n"));
     assert.ok(lines.some((line) => /^直接接続 IPv4（127\.0\.0\.1）: 接続できません（ECONNREFUSED）$/.test(line)), lines.join("\n"));
+  });
+
+  it("プロキシが gateway へのトンネルを開けるかを確かめる", async () => {
+    const refusing = net.createServer((socket) => socket.once("data", () => socket.end("HTTP/1.1 403 Forbidden\r\n\r\n"))).listen(0, "127.0.0.1");
+    await once(refusing, "listening");
+    const refusingPort = (refusing.address() as AddressInfo).port;
+    try {
+      assert.equal(await probeProxyTunnel(`http://127.0.0.1:${refusingPort}`, "gateway.discord.gg", 443, 1000), "プロキシが拒否しました（HTTP/1.1 403 Forbidden）");
+    } finally {
+      refusing.close();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(await probeProxyTunnel(`http://127.0.0.1:${refusingPort}`, "gateway.discord.gg", 443, 1000), "プロキシに接続できません（ECONNREFUSED）");
+    assert.equal(await probeProxyTunnel("socks5://127.0.0.1:1080", "gateway.discord.gg", 443), "socks5: のプロキシは確認できません");
+  });
+
+  it("起動ファイルは discord.js を読み込む前にプロキシを設定する（本体は後から読み込む）", () => {
+    const staticImports = (file: string) =>
+      [...fs.readFileSync(path.resolve(__dirname, "..", file), "utf8").matchAll(/^import\s[^;]*?from\s+"([^"]+)"|^import\s+"([^"]+)"/gm)].map((m) => m[1] ?? m[2]);
+    // Bun runs CommonJS packages before the importing module's own code, so anything more here would load discord.js too early.
+    assert.deepEqual(staticImports("src/index.ts"), ["./lib/network"]);
+    assert.ok(staticImports("src/lib/network.ts").every((name) => name.startsWith("node:")));
+    assert.match(fs.readFileSync(path.resolve(__dirname, "../src/index.ts"), "utf8"), /import\("\.\/app"\)/);
   });
 });
