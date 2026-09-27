@@ -9,6 +9,7 @@ import {
 import { prisma } from "../../lib/prisma";
 import { DomainError, fail } from "../../core/errors";
 import { POSITION_KEYS, POSITIONS, type PositionKey } from "../../core/positions";
+import { roleTag } from "../../core/text";
 import {
   ADMIN_APPOINTABLE,
   adminAppoint,
@@ -176,7 +177,7 @@ export const adminCommand: BotCommand = {
           const owner = await interaction.guild.fetchOwner();
           try {
             await adminAppoint(actor, "SOVEREIGN", { ...identityOf(owner.user, owner), isDiscordAdmin: true });
-            sovereign = `サーバーオーナー ${mention(owner.id)} を元首に任命しました`;
+            sovereign = `サーバーオーナー ${mention(owner.id)} を ${roleTag("元首")} に任命しました`;
           } catch (error) {
             if (!(error instanceof DomainError)) throw error;
             sovereign = `未任命（${error.message}）`;
@@ -190,7 +191,7 @@ export const adminCommand: BotCommand = {
         const checks = await diagnose(interaction.guild);
         const show = (id: string | null) => (id ? `<#${id}>` : "未設定");
 
-        const body = embed(COLOR.admin, "⚙️ 民主主義Bot 初期設定")
+        const body = embed(COLOR.admin, "民主主義Bot｜初期設定")
           .addFields(
             field(
               "チャンネル",
@@ -206,11 +207,11 @@ export const adminCommand: BotCommand = {
               [
                 `作成: ${roles.created.length > 0 ? roles.created.join("、") : "なし"}`,
                 `既存: ${roles.existing}件`,
-                ...roles.failed.map((f) => `⚠️ ${f}`),
+                ...roles.failed.map((f) => `\`失敗\` ${f}`),
               ].join("\n"),
             ),
-            field("元首", sovereign),
-            field("ロール同期", [`${sync.synced}名を同期`, ...sync.errors.map((e) => `⚠️ ${e}`)].join("\n")),
+            field(roleTag("元首"), sovereign),
+            field("ロール同期", [`${sync.synced}名を同期`, ...sync.errors.map((e) => `\`失敗\` ${e}`)].join("\n")),
             field("診断", limitLines(checks)),
             field(
               "次のステップ",
@@ -232,9 +233,9 @@ export const adminCommand: BotCommand = {
         const sync = await syncAllMembers(interaction.guild);
         await replyEmbed(
           interaction,
-          embed(COLOR.admin, "🔄 ロール同期").addFields(
-            field("役職ロール", [`作成: ${roles.created.join("、") || "なし"}`, `既存: ${roles.existing}件`, ...roles.failed.map((f) => `⚠️ ${f}`)].join("\n")),
-            field("メンバー", [`${sync.synced}名を同期`, ...sync.errors.map((e) => `⚠️ ${e}`)].join("\n")),
+          embed(COLOR.admin, "ロール同期").addFields(
+            field("役職ロール", [`作成: ${roles.created.join("、") || "なし"}`, `既存: ${roles.existing}件`, ...roles.failed.map((f) => `\`失敗\` ${f}`)].join("\n")),
+            field("メンバー", [`${sync.synced}名を同期`, ...sync.errors.map((e) => `\`失敗\` ${e}`)].join("\n")),
           ),
         );
         return;
@@ -243,7 +244,7 @@ export const adminCommand: BotCommand = {
       case "diagnose": {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const checks = await diagnose(interaction.guild);
-        await replyEmbed(interaction, embed(COLOR.admin, "🩺 診断結果").setDescription(checks.join("\n")));
+        await replyEmbed(interaction, embed(COLOR.admin, "診断結果").setDescription(checks.join("\n")));
         return;
       }
 
@@ -256,13 +257,13 @@ export const adminCommand: BotCommand = {
         if (Object.keys(input).length === 0) {
           const guild = await getGuild(prisma, actor.guildId);
           const lines = SETTING_OPTIONS.map(({ option, key }) => `${settingField(key).label}: **${formatSetting(key, guild[key])}**（\`${option}\`）`);
-          await replyEmbed(interaction, embed(COLOR.admin, "⚙️ 現在の制度").setDescription(lines.join("\n")), { ephemeral: true });
+          await replyEmbed(interaction, embed(COLOR.admin, "現在の制度").setDescription(lines.join("\n")), { ephemeral: true });
           return;
         }
         const { changes } = await updateSettings(actor, input);
         await replyEmbed(
           interaction,
-          embed(COLOR.admin, "⚙️ 制度の改正").setDescription(changes.length > 0 ? changes.map((c) => `・${c}`).join("\n") : "変更はありませんでした。"),
+          embed(COLOR.admin, "制度の改正").setDescription(changes.length > 0 ? changes.map((c) => `・${c}`).join("\n") : "変更はありませんでした。"),
         );
         return;
       }
@@ -273,7 +274,7 @@ export const adminCommand: BotCommand = {
         await adminAppoint(actor, key, { ...target.identity, isDiscordAdmin: target.isDiscordAdmin });
         await replyEmbed(
           interaction,
-          embed(COLOR.admin, `${POSITIONS[key].emoji} ${POSITIONS[key].label}の任命`).setDescription(`${mention(target.user.id)} を${POSITIONS[key].label}に任命しました。`),
+          embed(COLOR.admin, `人事｜${POSITIONS[key].label}の任命`).setDescription(`${mention(target.user.id)} を ${roleTag(POSITIONS[key].label)} に任命しました。`),
         );
         return;
       }
@@ -284,14 +285,14 @@ export const adminCommand: BotCommand = {
         const ended = await adminDismiss(actor, target.user.id, key, interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, "🛡️ 管理者権限による罷免").setDescription(ended.map((p) => `${mention(p.citizen.discordId)}: ${p.title}（${p.endReason}）`).join("\n")),
+          embed(COLOR.danger, "管理者権限による罷免").setDescription(ended.map((p) => `${mention(p.citizen.discordId)} ${roleTag(p.title)}（${p.endReason}）`).join("\n")),
         );
         return;
       }
 
       case "bill sanction": {
         const bill = await sanctionBill(actor, interaction.options.getInteger("bill", true));
-        await replyEmbed(interaction, embed(COLOR.success, `✅ 第${bill.number}号「${bill.title}」裁可・成立`).setDescription("法律として成立しました。内閣は `/cabinet implement` で施行を記録できます。"));
+        await replyEmbed(interaction, embed(COLOR.success, `第${bill.number}号「${bill.title}」裁可・成立`).setDescription("法律として成立しました。内閣は `/cabinet implement` で施行を記録できます。"));
         return;
       }
 
@@ -299,7 +300,7 @@ export const adminCommand: BotCommand = {
         const bill = await vetoBill(actor, interaction.options.getInteger("bill", true), interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, `🚫 第${bill.number}号「${bill.title}」拒否権行使`).setDescription(
+          embed(COLOR.danger, `第${bill.number}号「${bill.title}」拒否権行使`).setDescription(
             `理由: ${bill.vetoReason}\n国会は \`/parliament bill override\` で再議決（出席議員の3分の2以上）を発議できます。`,
           ),
         );
@@ -311,7 +312,7 @@ export const adminCommand: BotCommand = {
         const election = await dissolveParliament(actor, interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, "🏛️ 議会解散").setDescription(`すべての議員が失職し、${election.title}が告示されました。`).addFields(
+          embed(COLOR.danger, "議会解散").setDescription(`すべての議員が失職し、${election.title}が告示されました。`).addFields(
             field("立候補の締切", withRelative(election.registrationEndsAt)),
             field("投票の締切", withRelative(election.votingEndsAt)),
           ),
@@ -324,8 +325,8 @@ export const adminCommand: BotCommand = {
         const result = await revokeCitizenship(actor, target.identity, interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, "⛔ 市民権の停止").setDescription(
-            `${mention(target.user.id)} の市民権を停止しました。${result.ended.length > 0 ? `\n失職: ${result.ended.map((p) => p.title).join("、")}` : ""}`,
+          embed(COLOR.danger, "市民権の停止").setDescription(
+            `${mention(target.user.id)} の市民権を停止しました。${result.ended.length > 0 ? `\n失職: ${result.ended.map((p) => roleTag(p.title)).join(" ")}` : ""}`,
           ),
         );
         return;

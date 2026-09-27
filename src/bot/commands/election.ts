@@ -75,7 +75,7 @@ export const electionCommand: BotCommand = {
         const overview = await electionOverview(actor.guildId);
         if (!overview) fail("進行中の選挙はありません。過去の結果は `/election results` で確認できます。");
         const { election, candidates, turnout } = overview;
-        const body = embed(COLOR.election, `🗳️ ${election.title}`)
+        const body = embed(COLOR.election, election.title)
           .setDescription(election.description ?? null)
           .addFields(
             field("種類", ELECTION_KIND_LABEL[election.kind as ElectionKind], true),
@@ -100,7 +100,7 @@ export const electionCommand: BotCommand = {
 
       case "candidacy": {
         const { election, candidate } = await standForElection(actor, interaction.options.getString("manifesto") ?? undefined);
-        const body = embed(COLOR.success, `📝 立候補届出: ${election.title}`)
+        const body = embed(COLOR.success, `立候補届出｜${election.title}`)
           .setDescription(`${mention(actor.discordId)} さんが立候補しました。`)
           .addFields(field("立候補の締切", withRelative(election.registrationEndsAt)));
         if (candidate.manifesto) body.addFields(field("公約", candidate.manifesto));
@@ -117,7 +117,7 @@ export const electionCommand: BotCommand = {
       case "vote": {
         const overview = await electionOverview(actor.guildId);
         if (!overview || overview.election.status !== "VOTING") fail("現在、投票を受け付けている選挙はありません。");
-        const body = embed(COLOR.election, `🗳️ ${overview.election.title}`)
+        const body = embed(COLOR.election, overview.election.title)
           .setDescription("投票はWebで行います。Discordでログインして候補者を選んでください。\n秘密投票のため、誰が誰に投票したかは記録されません。")
           .addFields(field("投票の締切", withRelative(overview.election.votingEndsAt)));
         await replyEmbed(interaction, body, { ephemeral: true, components: [linkRow("Webで投票する", electionPath)] });
@@ -128,7 +128,7 @@ export const electionCommand: BotCommand = {
         const result = await electionResults(actor.guildId, interaction.options.getInteger("election") ?? undefined);
         if (!result) fail("確定した選挙はまだありません。");
         const { election, candidates, turnout } = result;
-        const body = embed(election.status === "COMPLETED" ? COLOR.success : COLOR.neutral, `📊 ${election.title} 結果`).addFields(
+        const body = embed(election.status === "COMPLETED" ? COLOR.success : COLOR.neutral, `${election.title}｜結果`).addFields(
           field("状態", ELECTION_STATUS_LABEL[election.status as ElectionStatus], true),
           field("定数", `${election.seats}名`, true),
           field("投票者数", `${turnout}名`, true),
@@ -138,7 +138,7 @@ export const electionCommand: BotCommand = {
           body.addFields(
             field(
               "得票",
-              limitLines(candidates.map((c) => `${c.elected ? "🏆 当選" : "　 落選"}　${mention(c.citizen.discordId)}　${c.voteCount ?? 0}票`)),
+              limitLines(candidates.map((c) => `${c.elected ? "`当選`" : "`落選`"}　${mention(c.citizen.discordId)}　${c.voteCount ?? 0}票`)),
             ),
           );
           if (election.lotteryUsed) body.setFooter({ text: "最下位当選者が得票同数のため、くじで当選人を決定しました" });
@@ -155,7 +155,7 @@ export const electionCommand: BotCommand = {
           registrationDays: interaction.options.getInteger("registration_days") ?? undefined,
           votingDays: interaction.options.getInteger("voting_days") ?? undefined,
         });
-        const body = embed(COLOR.election, `📣 ${election.title} 告示`)
+        const body = embed(COLOR.election, `${election.title}｜告示`)
           .setDescription(election.description ?? null)
           .addFields(
             field("定数", `${election.seats}名`, true),
@@ -171,7 +171,7 @@ export const electionCommand: BotCommand = {
         const election = await advanceElection(actor);
         await replyEmbed(
           interaction,
-          embed(COLOR.election, "⏩ 選挙の進行").setDescription(
+          embed(COLOR.election, "選挙の進行").setDescription(
             election ? `${election.title} は「${ELECTION_STATUS_LABEL[election.status as ElectionStatus]}」になりました。` : "状態は変わりませんでした。",
           ),
         );
@@ -180,7 +180,7 @@ export const electionCommand: BotCommand = {
 
       case "manage cancel": {
         const election = await cancelElection(actor, interaction.options.getString("reason", true));
-        await replyEmbed(interaction, embed(COLOR.danger, `🛑 ${election.title} 中止`).setDescription(`理由: ${election.cancelReason}`));
+        await replyEmbed(interaction, embed(COLOR.danger, `${election.title}｜中止`).setDescription(`理由: ${election.cancelReason}`));
         return;
       }
     }

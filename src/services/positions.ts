@@ -10,6 +10,7 @@ import {
   POSITIONS,
   type PositionKey,
 } from "../core/positions";
+import { roleTag } from "../core/text";
 import { getGuild } from "./guild";
 
 export type PositionWithCitizen = Position & { citizen: Citizen };
@@ -218,5 +219,5 @@ export async function endAllPositions(
 }
 
 export function describeEnded(ended: PositionWithCitizen[]): string {
-  return ended.map((p) => `・${p.citizen.displayName}（${p.title}）: ${p.endReason ?? "退任"}`).join("\n");
+  return ended.map((p) => `・${p.citizen.displayName} ${roleTag(p.title)}: ${p.endReason ?? "退任"}`).join("\n");
 }

@@ -64,7 +64,7 @@ async function openThread(client: Client, channelId: string | null, name: string
 
 function gazetteEmbed(entry: { number: number; category: string; title: string; body: string; createdAt: Date }): EmbedBuilder {
   const category = entry.category as GazetteCategory;
-  return embed(GAZETTE_COLOR[category] ?? COLOR.neutral, `📜 官報 第${entry.number}号｜${entry.title}`)
+  return embed(GAZETTE_COLOR[category] ?? COLOR.neutral, `官報 第${entry.number}号｜${entry.title}`)
     .setDescription(truncate(renderTokens(entry.body), 4000))
     .setFooter({ text: `${GAZETTE_CATEGORY_LABEL[category] ?? entry.category}｜民主主義Bot 官報` })
     .setTimestamp(entry.createdAt);
@@ -87,7 +87,7 @@ async function handle(client: Client, event: Exclude<DomainEvent, { type: "roles
     case "billCreated": {
       const bill = await prisma.bill.findUnique({ where: { id: event.billId }, include: { proposer: true, target: true } });
       if (!bill || !settings.debateChannelId) return;
-      const body = embed(COLOR.parliament, `📋 第${bill.number}号 ${BILL_KIND_LABEL[bill.kind as BillKind]}「${bill.title}」`)
+      const body = embed(COLOR.parliament, `第${bill.number}号 ${BILL_KIND_LABEL[bill.kind as BillKind]}「${bill.title}」`)
         .setDescription(truncate(bill.content, 3500))
         .addFields(
           field("提出", `${BILL_ORIGIN_LABEL[bill.origin as BillOrigin]}（${mention(bill.proposer.discordId)}）`, true),
@@ -107,7 +107,7 @@ async function handle(client: Client, event: Exclude<DomainEvent, { type: "roles
     case "caseFiled": {
       const found = await prisma.courtCase.findUnique({ where: { id: event.caseId }, include: { plaintiff: true, defendant: true } });
       if (!found || !settings.courtChannelId) return;
-      const body = embed(COLOR.court, `⚖️ 事件 第${found.number}号「${found.title}」`)
+      const body = embed(COLOR.court, `事件 第${found.number}号「${found.title}」`)
         .setDescription(truncate(found.claim, 3500))
         .addFields(field("原告", mention(found.plaintiff.discordId), true), field("被告", mention(found.defendant.discordId), true))
         .setFooter({ text: "被告は /court respond で答弁できます" });
@@ -128,7 +128,7 @@ async function handle(client: Client, event: Exclude<DomainEvent, { type: "roles
     case "electionVotingOpened": {
       const election = await prisma.election.findUnique({ where: { id: event.electionId } });
       if (!election) return;
-      const body = embed(COLOR.election, `🗳️ ${election.title} 投票受付中`)
+      const body = embed(COLOR.election, `${election.title}｜投票受付中`)
         .setDescription("Webの投票ページからDiscordでログインして投票してください。秘密投票のため、誰が誰に投票したかは記録されません。")
         .addFields(field("投票締切", withRelative(election.votingEndsAt)));
       await sendTo(client, settings.electionChannelId ?? settings.announceChannelId, {

@@ -89,8 +89,10 @@ export function linkRow(label: string, path: string): ActionRowBuilder<ButtonBui
 
 type Replyable = ChatInputCommandInteraction;
 
+export const ERROR_PREFIX = "`エラー`";
+
 export async function replyError(interaction: Replyable, message: string): Promise<void> {
-  const payload = { content: `❌ ${truncate(message, 1900)}`, flags: MessageFlags.Ephemeral } as const;
+  const payload = { content: `${ERROR_PREFIX} ${truncate(message, 1900)}`, flags: MessageFlags.Ephemeral } as const;
   if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
   else await interaction.reply(payload);
 }

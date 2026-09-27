@@ -122,7 +122,6 @@ guildApi.get("/overview", async (req: Request<{ guildId: string }>, res) => {
       return {
         key,
         label: def.label,
-        emoji: def.emoji,
         rank: def.rank,
         faction: def.faction,
         factionLabel: FACTION_LABEL[def.faction],

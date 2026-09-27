@@ -14,7 +14,7 @@ import {
   type VoteChoice,
 } from "../../core/constants";
 import { describeTally } from "../../core/tally";
-import { truncate } from "../../core/text";
+import { roleTag, truncate } from "../../core/text";
 import {
   appointAide,
   billDetail,
@@ -162,7 +162,7 @@ export const parliamentCommand: BotCommand = {
           title: interaction.options.getString("title", true),
           content: interaction.options.getString("content", true),
         });
-        const body = embed(COLOR.parliament, `📋 第${bill.number}号議案「${bill.title}」提出`)
+        const body = embed(COLOR.parliament, `第${bill.number}号議案「${bill.title}」提出`)
           .setDescription(truncate(bill.content, 3000))
           .addFields(field("提出", `${BILL_ORIGIN_LABEL[bill.origin as BillOrigin]}（${mention(actor.discordId)}）`, true))
           .setFooter({ text: "議長が /parliament bill open で採決を開始します" });
@@ -173,7 +173,7 @@ export const parliamentCommand: BotCommand = {
       case "bill list": {
         const filter = (interaction.options.getString("filter") ?? "open") as BillFilter;
         const bills = await listBills(actor.guildId, filter);
-        const body = embed(COLOR.parliament, "📋 法案一覧").setDescription(
+        const body = embed(COLOR.parliament, "法案一覧").setDescription(
           bills.length === 0
             ? "該当する法案はありません。"
             : bills
@@ -194,7 +194,7 @@ export const parliamentCommand: BotCommand = {
         if (!detail) fail("法案が見つかりません。");
         const { bill, votes, tally } = detail;
         const byChoice = (choice: VoteChoice) => joinNames(votes.filter((v) => v.choice === choice).map((v) => mention(v.citizen.discordId)), "なし");
-        const body = embed(COLOR.parliament, `📋 第${bill.number}号 ${BILL_KIND_LABEL[bill.kind as BillKind]}「${bill.title}」`)
+        const body = embed(COLOR.parliament, `第${bill.number}号 ${BILL_KIND_LABEL[bill.kind as BillKind]}「${bill.title}」`)
           .setDescription(truncate(bill.content, 2500))
           .addFields(
             field("状態", billStatusLabel(bill.status, bill.kind), true),
@@ -226,7 +226,7 @@ export const parliamentCommand: BotCommand = {
         const bill = await openBillVote(actor, billNumber(), interaction.options.getInteger("days") ?? undefined);
         await replyEmbed(
           interaction,
-          embed(COLOR.parliament, `🔔 第${bill.number}号「${bill.title}」採決開始`)
+          embed(COLOR.parliament, `第${bill.number}号「${bill.title}」採決開始`)
             .setDescription("議員は `/parliament bill vote` で投票してください。全員の投票がそろうと締切前でも集計されます。")
             .addFields(field("採決の締切", bill.votingEndsAt ? withRelative(bill.votingEndsAt) : "—")),
         );
@@ -236,8 +236,8 @@ export const parliamentCommand: BotCommand = {
       case "bill vote": {
         const choice = interaction.options.getString("choice", true) as VoteChoice;
         const { bill, tally, decision } = await castBillVote(actor, billNumber(), choice);
-        const body = embed(COLOR.parliament, `🗳️ 第${bill.number}号「${bill.title}」`)
-          .setDescription(`${mention(actor.discordId)} 議員が **${VOTE_CHOICE_LABEL[choice]}** に投票しました（記名投票）。`)
+        const body = embed(COLOR.parliament, `第${bill.number}号「${bill.title}」`)
+          .setDescription(`${roleTag("国民代表（議員）")} ${mention(actor.discordId)} が \`${VOTE_CHOICE_LABEL[choice]}\` に投票しました（記名投票）。`)
           .addFields(field("現在の集計", describeTally(tally)));
         if (decision) body.addFields(field("結果", `全議員の投票がそろったため集計しました: **${billStatusLabel(decision.status, bill.kind)}**`));
         await replyEmbed(interaction, body);
@@ -254,7 +254,7 @@ export const parliamentCommand: BotCommand = {
         const bill = await moveOverride(actor, billNumber(), interaction.options.getInteger("days") ?? undefined);
         await replyEmbed(
           interaction,
-          embed(COLOR.parliament, `⚖️ 第${bill.number}号「${bill.title}」再議決`)
+          embed(COLOR.parliament, `第${bill.number}号「${bill.title}」再議決`)
             .setDescription("管理者派閥の拒否権に対する再議決です。出席議員の3分の2以上の賛成で成立します。")
             .addFields(field("採決の締切", bill.votingEndsAt ? withRelative(bill.votingEndsAt) : "—")),
         );
@@ -266,8 +266,8 @@ export const parliamentCommand: BotCommand = {
         const candidate = interaction.options.getUser("candidate", true);
         const result = await voteForOffice(actor, office, candidate.id);
         const label = OFFICE_LABEL[office];
-        const body = embed(result.elected ? COLOR.success : COLOR.parliament, result.elected ? `🎉 ${label}に ${result.elected.displayName} を選出` : `🗳️ ${label}選挙`)
-          .setDescription(`${mention(actor.discordId)} 議員が ${mention(candidate.id)} に投票しました（記名投票）。`)
+        const body = embed(result.elected ? COLOR.success : COLOR.parliament, result.elected ? `${label}に ${result.elected.displayName} を選出` : `${label}選挙`)
+          .setDescription(`${mention(actor.discordId)} が ${roleTag(label)} の選挙で ${mention(candidate.id)} に投票しました（記名投票）。`)
           .addFields(
             field(
               "得票",
@@ -283,7 +283,7 @@ export const parliamentCommand: BotCommand = {
         const bill = await moveNoConfidence(actor, interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, `⚠️ 第${bill.number}号 ${bill.title}`)
+          embed(COLOR.danger, `第${bill.number}号 ${bill.title}`)
             .setDescription(`理由: ${bill.content}\n採決はすでに始まっています。可決されると内閣は総辞職します。`)
             .addFields(field("採決の締切", bill.votingEndsAt ? withRelative(bill.votingEndsAt) : "—")),
         );
@@ -295,8 +295,8 @@ export const parliamentCommand: BotCommand = {
         const bill = await moveImpeachment(actor, target.user.id, interaction.options.getString("reason", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, `⚠️ 第${bill.number}号 ${bill.title}`)
-            .setDescription(`理由: ${bill.content}\n出席議員の3分の2以上の賛成で、対象者は全役職（元首・管理官を除く）から罷免されます。`)
+          embed(COLOR.danger, `第${bill.number}号 ${bill.title}`)
+            .setDescription(`理由: ${bill.content}\n出席議員の3分の2以上の賛成で、対象者は全役職（${roleTag("元首")}・${roleTag("管理官")}を除く）から罷免されます。`)
             .addFields(field("採決の締切", bill.votingEndsAt ? withRelative(bill.votingEndsAt) : "—")),
         );
         return;
@@ -305,15 +305,15 @@ export const parliamentCommand: BotCommand = {
       case "members": {
         const roster = await parliamentRoster(actor.guildId);
         const aidesOf = (citizenId: string) => roster.aides.filter((a) => a.appointedById === citizenId).map((a) => a.citizen.displayName);
-        const body = embed(COLOR.parliament, `🏛️ 議員名簿（${roster.representatives.length}/${roster.seats}議席）`).addFields(
-          field("議長", roster.speaker ? mention(roster.speaker.citizen.discordId) : "空席（`/parliament elect` で選出）", true),
-          field("副議長", roster.viceSpeaker ? mention(roster.viceSpeaker.citizen.discordId) : "空席", true),
+        const body = embed(COLOR.parliament, `議員名簿（${roster.representatives.length}/${roster.seats}議席）`).addFields(
+          field(roleTag("議長"), roster.speaker ? mention(roster.speaker.citizen.discordId) : "空席（`/parliament elect` で選出）", true),
+          field(roleTag("副議長"), roster.viceSpeaker ? mention(roster.viceSpeaker.citizen.discordId) : "空席", true),
           field(
-            "議員",
+            roleTag("国民代表（議員）"),
             limitLines(
               roster.representatives.map((r) => {
                 const aides = aidesOf(r.citizenId);
-                return `${mention(r.citizen.discordId)}${r.expiresAt ? `　任期 ${discordTime(r.expiresAt, "d")}まで` : ""}${aides.length > 0 ? `　補佐官: ${aides.join("、")}` : ""}`;
+                return `${mention(r.citizen.discordId)}${r.expiresAt ? `　任期 ${discordTime(r.expiresAt, "d")}まで` : ""}${aides.length > 0 ? `　${roleTag("補佐官")} ${aides.join("、")}` : ""}`;
               }),
               "議員はいません（選挙を実施してください）",
             ),
@@ -327,7 +327,7 @@ export const parliamentCommand: BotCommand = {
         }
         for (const [office, tally] of offices) {
           body.addFields(
-            field(`${OFFICE_LABEL[office as Office]}選挙（進行中）`, [...tally].map(([name, votes]) => `${name}: ${votes}票`).join("\n")),
+            field(`${roleTag(OFFICE_LABEL[office as Office])} 選挙（進行中）`, [...tally].map(([name, votes]) => `${name}: ${votes}票`).join("\n")),
           );
         }
         await replyEmbed(interaction, body);
@@ -337,14 +337,14 @@ export const parliamentCommand: BotCommand = {
       case "aide appoint": {
         const target = targetOf(interaction, "user");
         const position = await appointAide(actor, target.user.id, target.isDiscordAdmin);
-        await replyEmbed(interaction, embed(COLOR.success, "📎 補佐官の任命").setDescription(`${mention(target.user.id)} を **${position.title}** に任命しました。`));
+        await replyEmbed(interaction, embed(COLOR.success, "補佐官の任命").setDescription(`${mention(target.user.id)} を ${roleTag(position.title)} に任命しました。`));
         return;
       }
 
       case "aide dismiss": {
         const target = targetOf(interaction, "user");
         await dismissAide(actor, target.user.id);
-        await replyEmbed(interaction, embed(COLOR.neutral, "📎 補佐官の解任").setDescription(`${mention(target.user.id)} を補佐官から解任しました。`));
+        await replyEmbed(interaction, embed(COLOR.neutral, "補佐官の解任").setDescription(`${mention(target.user.id)} を ${roleTag("補佐官")} から解任しました。`));
         return;
       }
     }

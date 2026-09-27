@@ -1,6 +1,7 @@
 import { InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { prisma } from "../../lib/prisma";
 import { CABINET_KEYS, ELECTORAL_KEYS, JUDICIAL_KEYS, PRESIDING_KEYS, type PositionKey } from "../../core/positions";
+import { roleTag } from "../../core/text";
 import { actorFrom } from "../context";
 import { COLOR, embed, field, replyEmbed } from "../ui";
 import type { BotCommand } from "./types";
@@ -8,14 +9,14 @@ import type { BotCommand } from "./types";
 interface Section {
   title: string;
   lines: string[];
-  /** Holders of any of these positions see the section marked as theirs. */
+  /** Holders of any of these positions see the section marked as usable. */
   holders?: PositionKey[];
   adminOnly?: boolean;
 }
 
 const SECTIONS: Section[] = [
   {
-    title: "👤 市民（だれでも）",
+    title: `${roleTag("市民")}（だれでも）`,
     lines: [
       "`/citizen register` 市民登録　`/citizen profile` 経歴　`/citizen resign` 辞職　`/citizen leave` 登録抹消",
       "`/gov overview` 政府構成　`/gov positions` 役職一覧　`/gov rules` 国の制度　`/gov gazette` 官報",
@@ -26,7 +27,7 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: "🏛️ 国民代表（議員）",
+    title: roleTag("国民代表（議員）"),
     holders: ["REPRESENTATIVE"],
     lines: [
       "`/parliament bill submit | vote | withdraw | override` 法案の提出・採決・再議決",
@@ -36,12 +37,12 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: "🔔 議長・副議長",
+    title: `${roleTag("議長")}・${roleTag("副議長")}`,
     holders: PRESIDING_KEYS,
     lines: ["`/parliament bill open` 採決の開始（議長不在時は議員が行えます）"],
   },
   {
-    title: "🎌 内閣",
+    title: `内閣（${roleTag("内閣総理大臣")}・閣僚）`,
     holders: CABINET_KEYS,
     lines: [
       "`/cabinet appoint | dismiss` 閣僚・裁判官の任命と罷免（首相）",
@@ -50,17 +51,17 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: "⚖️ 司法",
+    title: `司法（${roleTag("最高裁判所長官")}・${roleTag("裁判官")}）`,
     holders: JUDICIAL_KEYS,
     lines: ["`/court assign` 配点（長官）　`/court take` 事件の担当", "`/court verdict` 判決　`/court final-ruling` 上告審の判決"],
   },
   {
-    title: "🗳️ 選挙管理委員会",
+    title: `選挙管理委員会（${roleTag("選挙管理委員長")}・${roleTag("選挙管理委員")}）`,
     holders: ELECTORAL_KEYS,
     lines: ["`/election manage start | advance | cancel` 選挙の告示・進行・中止（管理者も可）"],
   },
   {
-    title: "🛡️ 管理者専用（/admin はDiscordの管理者にだけ表示されます）",
+    title: "管理者専用（/admin はDiscordの管理者にだけ表示されます）",
     adminOnly: true,
     lines: [
       "`/admin setup` 初期設定　`/admin sync` ロール同期　`/admin diagnose` 診断　`/admin settings` 制度の変更",
@@ -85,13 +86,13 @@ export const helpCommand: BotCommand = {
       select: { key: true },
     });
     const held = new Set(positions.map((p) => p.key));
-    const body = embed(COLOR.primary, "🏛️ 民主主義Bot コマンド一覧").setDescription(
-      "管理者派閥と国民代表派閥が、選挙・国会・内閣・裁判所を通じてサーバーを運営します。✅ はあなたの役職で使えるコマンドです。",
+    const body = embed(COLOR.primary, "民主主義Bot｜コマンド一覧").setDescription(
+      "管理者派閥と国民代表派閥が、選挙・国会・内閣・裁判所を通じてサーバーを運営します。`使用可` はあなたの役職で使えるコマンドです。",
     );
     for (const section of SECTIONS) {
       if (section.adminOnly && !actor.isAdmin) continue;
-      const mine = section.adminOnly || section.holders?.some((key) => held.has(key));
-      body.addFields(field(`${mine ? "✅ " : ""}${section.title}`, section.lines.join("\n")));
+      const usable = section.adminOnly || section.holders?.some((key) => held.has(key));
+      body.addFields(field(`${section.title}${usable ? "　`使用可`" : ""}`, section.lines.join("\n")));
     }
     await replyEmbed(interaction, body, { ephemeral: true });
   },

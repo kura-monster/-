@@ -258,6 +258,30 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* {`裁判官`}: roles are written as inline code wrapped in braces, as in the bot's Discord messages. */
+.role-tag {
+  font-weight: 600;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.role-tag code,
+.rich code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK JP", monospace;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.05em 0.35em;
+  margin: 0 0.1em;
+}
+
+.brand .role-tag {
+  color: var(--text);
+}
+
 .chip {
   display: inline-block;
   padding: 1px 10px;

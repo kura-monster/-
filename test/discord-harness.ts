@@ -8,6 +8,7 @@ import {
   type Interaction,
 } from "discord.js";
 import { handleInteraction } from "../src/bot/client";
+import { ERROR_PREFIX } from "../src/bot/ui";
 import { COMMANDS } from "../src/bot/commands";
 import { GUILD, discordIdOf } from "./helpers";
 
@@ -119,7 +120,11 @@ function flatten(payload: unknown): Reply {
     };
     parts.push(data.title ?? "", data.description ?? "", ...(data.fields ?? []).flatMap((f) => [f.name, f.value]), data.footer?.text ?? "");
   }
-  return { text: parts.join("\n"), ephemeral: Boolean((p.flags ?? 0) & 64), error: (p.content ?? "").startsWith("❌") };
+  const text = parts.join("\n");
+  // The bot writes roles as {`裁判官`} and never uses emoji in anything it says.
+  const emoji = text.match(/\p{Extended_Pictographic}/u);
+  if (emoji) throw new Error(`reply contains emoji "${emoji[0]}": ${text.slice(0, 200)}`);
+  return { text, ephemeral: Boolean((p.flags ?? 0) & 64), error: (p.content ?? "").startsWith(ERROR_PREFIX) };
 }
 
 export async function run(person: FakePerson, commandName: string, route: string, values: Record<string, Value> = {}): Promise<Reply> {

@@ -1,5 +1,5 @@
 import { InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { POSITIONS, positionDef } from "../../core/positions";
+import { roleTag } from "../../core/text";
 import {
   cabinetAppoint,
   cabinetDismiss,
@@ -91,8 +91,8 @@ export const cabinetCommand: BotCommand = {
         );
         await replyEmbed(
           interaction,
-          embed(COLOR.cabinet, `${POSITIONS[key].emoji} ${position.title}の任命`).setDescription(
-            `内閣総理大臣 ${mention(actor.discordId)} が ${mention(target.user.id)} を **${position.title}** に任命しました。`,
+          embed(COLOR.cabinet, `人事｜${position.title}の任命`).setDescription(
+            `${roleTag("内閣総理大臣")} ${mention(actor.discordId)} が ${mention(target.user.id)} を ${roleTag(position.title)} に任命しました。`,
           ),
         );
         return;
@@ -104,7 +104,7 @@ export const cabinetCommand: BotCommand = {
         const position = await cabinetDismiss(actor, target.user.id, key);
         await replyEmbed(
           interaction,
-          embed(COLOR.warning, `${position.title}の罷免`).setDescription(`${mention(target.user.id)} を${position.title}から罷免しました。`),
+          embed(COLOR.warning, `人事｜${position.title}の罷免`).setDescription(`${mention(target.user.id)} を ${roleTag(position.title)} から罷免しました。`),
         );
         return;
       }
@@ -112,11 +112,11 @@ export const cabinetCommand: BotCommand = {
       case "list": {
         const { members, judges } = await cabinetRoster(actor.guildId);
         const pm = members.find((m) => m.key === "PRIME_MINISTER");
-        const body = embed(COLOR.cabinet, pm ? `🎌 ${pm.citizen.displayName}内閣` : "🎌 内閣（首相不在）")
+        const body = embed(COLOR.cabinet, pm ? `${pm.citizen.displayName}内閣` : "内閣（首相不在）")
           .setDescription(pm ? null : "国会の `/parliament elect` で内閣総理大臣を指名してください。")
           .addFields(
-            field("閣僚", limitLines(members.map((m) => `${positionDef(m.key).emoji} ${m.title}: ${mention(m.citizen.discordId)}`))),
-            field("裁判所", limitLines(judges.map((j) => `${j.title}: ${mention(j.citizen.discordId)}`))),
+            field("閣僚", limitLines(members.map((m) => `${roleTag(m.title)} ${mention(m.citizen.discordId)}`))),
+            field("裁判所", limitLines(judges.map((j) => `${roleTag(j.title)} ${mention(j.citizen.discordId)}`))),
           );
         await replyEmbed(interaction, body);
         return;
@@ -126,8 +126,8 @@ export const cabinetCommand: BotCommand = {
         const ended = await cabinetResign(actor);
         await replyEmbed(
           interaction,
-          embed(COLOR.danger, "🎌 内閣総辞職").setDescription(
-            `${ended.map((p) => `${p.title}: ${mention(p.citizen.discordId)}`).join("\n")}\n\n国会は \`/parliament elect\` で新しい内閣総理大臣を指名してください。`,
+          embed(COLOR.danger, "内閣総辞職").setDescription(
+            `${ended.map((p) => `${roleTag(p.title)} ${mention(p.citizen.discordId)}`).join("\n")}\n\n国会は \`/parliament elect\` で新しい内閣総理大臣を指名してください。`,
           ),
         );
         return;
@@ -135,7 +135,7 @@ export const cabinetCommand: BotCommand = {
 
       case "statement": {
         const entry = await issueStatement(actor, interaction.options.getString("title", true), interaction.options.getString("content", true));
-        await replyEmbed(interaction, embed(COLOR.cabinet, `📣 ${entry.title}`).setDescription(renderTokens(entry.body)).setFooter({ text: `官報 第${entry.number}号に掲載` }));
+        await replyEmbed(interaction, embed(COLOR.cabinet, entry.title).setDescription(renderTokens(entry.body)).setFooter({ text: `官報 第${entry.number}号に掲載` }));
         return;
       }
 
@@ -143,7 +143,7 @@ export const cabinetCommand: BotCommand = {
         const bill = await implementLaw(actor, interaction.options.getInteger("bill", true), interaction.options.getString("note") ?? undefined);
         await replyEmbed(
           interaction,
-          embed(COLOR.success, `✅ 第${bill.number}号「${bill.title}」施行`).setDescription(bill.implementedNote ?? "施行を記録しました。"),
+          embed(COLOR.success, `第${bill.number}号「${bill.title}」施行`).setDescription(bill.implementedNote ?? "施行を記録しました。"),
         );
         return;
       }

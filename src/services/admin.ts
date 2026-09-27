@@ -1,4 +1,5 @@
 import { transact } from "../core/db";
+import { roleTag } from "../core/text";
 import { fail } from "../core/errors";
 import type { GazetteCategory } from "../core/constants";
 import { POSITIONS, type PositionKey } from "../core/positions";
@@ -53,7 +54,7 @@ export async function adminAppoint(
     await publish(tx, events, actor.guildId, {
       category: APPOINTMENT_CATEGORY[key],
       title: `${POSITIONS[key].label}の任命: ${citizen.displayName}`,
-      body: `管理者 ${actor.displayName} が ${citizen.displayName} を${POSITIONS[key].label}に任命しました。`,
+      body: `管理者 ${actor.displayName} が ${citizen.displayName} を ${roleTag(POSITIONS[key].label)} に任命しました。`,
       linkPath: `/g/${actor.guildId}`,
     });
     return position;
@@ -71,7 +72,7 @@ export async function adminDismiss(actor: Actor, targetDiscordId: string, key: P
     await publish(tx, events, actor.guildId, {
       category: "ADMIN",
       title: `管理者権限による罷免: ${citizen.displayName}`,
-      body: `管理者 ${actor.displayName} が ${citizen.displayName} を${position.title}から罷免しました。\n理由: ${reason}\n${describeEnded(ended)}`,
+      body: `管理者 ${actor.displayName} が ${citizen.displayName} を ${roleTag(position.title)} から罷免しました。\n理由: ${reason}\n${describeEnded(ended)}`,
     });
     return ended;
   });

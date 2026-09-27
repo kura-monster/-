@@ -22,10 +22,15 @@ const ROLE_PERMISSIONS: Partial<Record<ManagedKey, bigint[]>> = {
 
 const HOISTED: ManagedKey[] = ["SOVEREIGN", "PRIME_MINISTER", "SPEAKER", "CHIEF_JUSTICE", "REPRESENTATIVE"];
 
+/** Discord role names cannot use markdown, so roles are named {裁判官}. */
+export function roleName(label: string): string {
+  return `{${label}}`;
+}
+
 export function roleSpec(key: ManagedKey) {
-  if (key === "CITIZEN") return { name: "市民", color: null, hoist: false, permissions: [] as bigint[] };
+  if (key === "CITIZEN") return { name: roleName("市民"), color: null, hoist: false, permissions: [] as bigint[] };
   const def = POSITIONS[key];
-  return { name: def.label, color: def.color, hoist: HOISTED.includes(key), permissions: ROLE_PERMISSIONS[key] ?? [] };
+  return { name: roleName(def.label), color: def.color, hoist: HOISTED.includes(key), permissions: ROLE_PERMISSIONS[key] ?? [] };
 }
 
 export function describeDiscordError(error: unknown): string {

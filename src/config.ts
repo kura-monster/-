@@ -25,7 +25,7 @@ export function sessionSecret(): string {
   } else if (isProduction) {
     throw new Error("本番環境では SESSION_SECRET（16文字以上）を設定してください。");
   } else {
-    console.warn("⚠️ SESSION_SECRET が未設定のため一時的な値を使用します（再起動するとログアウトされます）。");
+    console.warn("[注意] SESSION_SECRET が未設定のため一時的な値を使用します（再起動するとログアウトされます）。");
     cachedSessionSecret = crypto.randomBytes(32).toString("hex");
   }
   return cachedSessionSecret;

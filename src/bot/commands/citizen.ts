@@ -1,13 +1,11 @@
 import { InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { fail } from "../../core/errors";
-import { isPositionKey, POSITIONS } from "../../core/positions";
+import { roleTag } from "../../core/text";
 import { citizenProfile, registerCitizen, removeCitizenship, resignPosition } from "../../services/citizen";
 import { actorFrom, identityOf } from "../context";
 import { COLOR, discordTime, embed, field, limitLines, mention, replyEmbed } from "../ui";
 import { suggestOwnPositions } from "./autocomplete";
 import { routeOf, type BotCommand } from "./types";
-
-const emojiOf = (key: string) => (isPositionKey(key) ? POSITIONS[key].emoji : "🔹");
 
 export const citizenCommand: BotCommand = {
   audience: "public",
@@ -46,8 +44,8 @@ export const citizenCommand: BotCommand = {
           accountCreatedAt: interaction.user.createdAt,
           joinedAt: interaction.member.joinedAt,
         });
-        const body = embed(COLOR.success, reactivated ? "🪪 市民登録（再登録）" : "🪪 市民登録完了")
-          .setDescription(`${mention(actor.discordId)} さんを市民として登録しました。`)
+        const body = embed(COLOR.success, reactivated ? "市民登録（再登録）" : "市民登録完了")
+          .setDescription(`${mention(actor.discordId)} さんを ${roleTag("市民")} として登録しました。`)
           .setThumbnail(identity.avatarUrl)
           .addFields(
             field("市民番号", `第${citizen.number}号`, true),
@@ -67,7 +65,7 @@ export const citizenCommand: BotCommand = {
         if (!profile) fail(`${mention(user.id)} さんは市民登録されていません。`);
         const { citizen } = profile;
         const status = citizen.revokedAt ? "市民権停止中" : citizen.active ? "市民" : "登録抹消";
-        const body = embed(COLOR.primary, `🪪 ${citizen.displayName}`)
+        const body = embed(COLOR.primary, `市民プロフィール｜${citizen.displayName}`)
           .setThumbnail(citizen.avatarUrl)
           .addFields(
             field("市民番号", `第${citizen.number}号`, true),
@@ -77,7 +75,7 @@ export const citizenCommand: BotCommand = {
               "現在の役職",
               limitLines(
                 profile.current.map(
-                  (p) => `${emojiOf(p.key)} ${p.title}${p.expiresAt ? `（任期: ${discordTime(p.expiresAt, "D")}まで）` : ""}`,
+                  (p) => `${roleTag(p.title)}${p.expiresAt ? `（任期: ${discordTime(p.expiresAt, "D")}まで）` : ""}`,
                 ),
               ),
             ),
@@ -85,7 +83,7 @@ export const citizenCommand: BotCommand = {
               "経歴",
               limitLines(
                 profile.history.map(
-                  (p) => `${emojiOf(p.key)} ${p.title}　${discordTime(p.startedAt, "d")}〜${p.endedAt ? discordTime(p.endedAt, "d") : ""}（${p.endReason ?? "退任"}）`,
+                  (p) => `${roleTag(p.title)}　${discordTime(p.startedAt, "d")}〜${p.endedAt ? discordTime(p.endedAt, "d") : ""}（${p.endReason ?? "退任"}）`,
                 ),
               ),
             ),
@@ -101,7 +99,7 @@ export const citizenCommand: BotCommand = {
         const position = await resignPosition(actor, interaction.options.getString("position", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.warning, "🚪 辞職").setDescription(`${mention(actor.discordId)} さんが **${position.title}** を辞職しました。`),
+          embed(COLOR.warning, "辞職").setDescription(`${mention(actor.discordId)} さんが ${roleTag(position.title)} を辞職しました。`),
         );
         return;
       }
@@ -112,8 +110,8 @@ export const citizenCommand: BotCommand = {
         if (!result) fail("市民登録されていません。");
         await replyEmbed(
           interaction,
-          embed(COLOR.neutral, "👋 市民登録の抹消").setDescription(
-            `${mention(actor.discordId)} さんの市民登録を抹消しました。${result.ended.length > 0 ? `\n失職した役職: ${result.ended.map((p) => p.title).join("、")}` : ""}`,
+          embed(COLOR.neutral, "市民登録の抹消").setDescription(
+            `${mention(actor.discordId)} さんの市民登録を抹消しました。${result.ended.length > 0 ? `\n失職した役職: ${result.ended.map((p) => roleTag(p.title)).join(" ")}` : ""}`,
           ),
         );
         return;

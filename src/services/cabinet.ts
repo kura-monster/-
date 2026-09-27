@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 import { transact, type Db } from "../core/db";
 import { fail } from "../core/errors";
 import { CABINET_KEYS, POSITIONS, type PositionKey } from "../core/positions";
-import { cleanText } from "../core/text";
+import { cleanText, roleTag } from "../core/text";
 import { findCitizen, requireCitizen, requireTargetCitizen } from "./citizen";
 import { publish } from "./gazette";
 import { findBill } from "./parliament";
@@ -53,7 +53,7 @@ export async function cabinetAppoint(
     await publish(tx, events, actor.guildId, {
       category: key === "JUDGE" ? "JUDICIARY" : "CABINET",
       title: `${positionTitle}の任命: ${citizen.displayName}`,
-      body: `内閣総理大臣 ${pm.displayName} が ${citizen.displayName} を${positionTitle}に任命しました。`,
+      body: `${roleTag("内閣総理大臣")} ${pm.displayName} が ${citizen.displayName} を ${roleTag(positionTitle)} に任命しました。`,
       linkPath: `/g/${actor.guildId}`,
     });
     return position;
@@ -71,7 +71,7 @@ export async function cabinetDismiss(actor: Actor, targetDiscordId: string, key:
     await publish(tx, events, actor.guildId, {
       category: "CABINET",
       title: `${position.title}の罷免: ${citizen.displayName}`,
-      body: `内閣総理大臣 ${pm.displayName} が ${citizen.displayName} を${position.title}から罷免しました。`,
+      body: `${roleTag("内閣総理大臣")} ${pm.displayName} が ${citizen.displayName} を ${roleTag(position.title)} から罷免しました。`,
     });
     return position;
   });
@@ -86,7 +86,7 @@ export async function cabinetResign(actor: Actor, now: Date = new Date()) {
     await publish(tx, events, actor.guildId, {
       category: "CABINET",
       title: `${pm.displayName}内閣 総辞職`,
-      body: `内閣総理大臣 ${pm.displayName} が内閣総辞職を表明しました。\n${describeEnded(ended)}\n国会は /parliament elect で新しい内閣総理大臣を指名してください。`,
+      body: `${roleTag("内閣総理大臣")} ${pm.displayName} が内閣総辞職を表明しました。\n${describeEnded(ended)}\n国会は /parliament elect で新しい内閣総理大臣を指名してください。`,
     });
     return ended;
   });
@@ -103,7 +103,7 @@ export async function issueStatement(actor: Actor, title: string, content: strin
     return publish(tx, events, actor.guildId, {
       category: "CABINET",
       title: `${speaker}「${title}」`,
-      body: `${content}\n\n${office.title} ${citizen.displayName}`,
+      body: `${content}\n\n${roleTag(office.title)} ${citizen.displayName}`,
     });
   });
 }

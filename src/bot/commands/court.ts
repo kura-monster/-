@@ -10,7 +10,7 @@ import {
   type Penalty,
   type PenaltyStatus,
 } from "../../core/constants";
-import { truncate } from "../../core/text";
+import { roleTag, truncate } from "../../core/text";
 import {
   appealCase,
   assignJudge,
@@ -107,7 +107,7 @@ export const courtCommand: BotCommand = {
         const filed = await fileCase(actor, defendant.user.id, interaction.options.getString("title", true), interaction.options.getString("claim", true));
         await replyEmbed(
           interaction,
-          embed(COLOR.court, `⚖️ 事件 第${filed.number}号「${filed.title}」受理`)
+          embed(COLOR.court, `事件 第${filed.number}号「${filed.title}」受理`)
             .setDescription(truncate(filed.claim, 3000))
             .addFields(field("原告", mention(actor.discordId), true), field("被告", mention(defendant.user.id), true))
             .setFooter({ text: "最高裁判所長官の配点、または裁判官の担当を待っています" }),
@@ -117,20 +117,20 @@ export const courtCommand: BotCommand = {
 
       case "respond": {
         const updated = await respondToCase(actor, caseNumber(), interaction.options.getString("statement", true));
-        await replyEmbed(interaction, embed(COLOR.court, `📝 事件 第${updated.number}号 答弁書`).setDescription(truncate(updated.defense ?? "", 3000)));
+        await replyEmbed(interaction, embed(COLOR.court, `事件 第${updated.number}号｜答弁書`).setDescription(truncate(updated.defense ?? "", 3000)));
         return;
       }
 
       case "assign": {
         const judge = targetOf(interaction, "judge");
         const updated = await assignJudge(actor, caseNumber(), judge.user.id);
-        await replyEmbed(interaction, embed(COLOR.court, `⚖️ 事件 第${updated.number}号 配点`).setDescription(`担当裁判官: ${mention(judge.user.id)}`));
+        await replyEmbed(interaction, embed(COLOR.court, `事件 第${updated.number}号｜配点`).setDescription(`担当: ${roleTag("裁判官")} ${mention(judge.user.id)}`));
         return;
       }
 
       case "take": {
         const updated = await takeCase(actor, caseNumber());
-        await replyEmbed(interaction, embed(COLOR.court, `⚖️ 事件 第${updated.number}号`).setDescription(`${mention(actor.discordId)} が担当裁判官として審理を開始しました。`));
+        await replyEmbed(interaction, embed(COLOR.court, `事件 第${updated.number}号｜担当`).setDescription(`${roleTag("裁判官")} ${mention(actor.discordId)} が担当として審理を開始しました。`));
         return;
       }
 
@@ -139,7 +139,7 @@ export const courtCommand: BotCommand = {
         const updated = await issueVerdict(actor, caseNumber(), input);
         await replyEmbed(
           interaction,
-          embed(COLOR.court, `🔨 事件 第${updated.number}号 判決`)
+          embed(COLOR.court, `事件 第${updated.number}号｜判決`)
             .setDescription(truncate(input.ruling, 3000))
             .addFields(
               field("主文", CASE_RESULT_LABEL[input.result], true),
@@ -152,7 +152,7 @@ export const courtCommand: BotCommand = {
 
       case "appeal": {
         const updated = await appealCase(actor, caseNumber(), interaction.options.getString("reason", true));
-        await replyEmbed(interaction, embed(COLOR.court, `📨 事件 第${updated.number}号 上告`).setDescription(`理由: ${updated.appealReason}`));
+        await replyEmbed(interaction, embed(COLOR.court, `事件 第${updated.number}号｜上告`).setDescription(`理由: ${updated.appealReason}`));
         return;
       }
 
@@ -161,7 +161,7 @@ export const courtCommand: BotCommand = {
         const updated = await issueFinalRuling(actor, caseNumber(), input);
         await replyEmbed(
           interaction,
-          embed(COLOR.court, `🏛️ 事件 第${updated.number}号 上告審判決（確定）`)
+          embed(COLOR.court, `事件 第${updated.number}号｜上告審判決（確定）`)
             .setDescription(truncate(input.ruling, 3000))
             .addFields(field("主文", CASE_RESULT_LABEL[input.result], true), field("制裁", PENALTY_LABEL[input.penalty], true)),
         );
@@ -170,13 +170,13 @@ export const courtCommand: BotCommand = {
 
       case "withdraw": {
         const updated = await withdrawCase(actor, caseNumber());
-        await replyEmbed(interaction, embed(COLOR.neutral, `事件 第${updated.number}号 取下げ`).setDescription("原告が訴えを取り下げました。"));
+        await replyEmbed(interaction, embed(COLOR.neutral, `事件 第${updated.number}号｜取下げ`).setDescription("原告が訴えを取り下げました。"));
         return;
       }
 
       case "list": {
         const cases = await listCases(actor.guildId, (interaction.options.getString("filter") ?? "open") as CaseFilter);
-        const body = embed(COLOR.court, "⚖️ 事件一覧").setDescription(
+        const body = embed(COLOR.court, "事件一覧").setDescription(
           cases.length === 0
             ? "該当する事件はありません。"
             : cases
@@ -193,13 +193,13 @@ export const courtCommand: BotCommand = {
       case "info": {
         const found = await caseDetail(actor.guildId, caseNumber());
         if (!found) fail("事件が見つかりません。");
-        const body = embed(COLOR.court, `⚖️ 事件 第${found.number}号「${found.title}」`)
+        const body = embed(COLOR.court, `事件 第${found.number}号「${found.title}」`)
           .setDescription(truncate(found.claim, 2000))
           .addFields(
             field("状態", CASE_STATUS_LABEL[found.status as CaseStatus], true),
             field("原告", mention(found.plaintiff.discordId), true),
             field("被告", mention(found.defendant.discordId), true),
-            field("担当裁判官", found.judge ? mention(found.judge.discordId) : "未定", true),
+            field(`担当${roleTag("裁判官")}`, found.judge ? mention(found.judge.discordId) : "未定", true),
             field("提訴日", discordTime(found.filedAt, "D"), true),
           );
         if (found.defense) body.addFields(field("答弁", found.defense));

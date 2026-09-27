@@ -86,18 +86,31 @@ function deadline(iso) {
   return h("time", { datetime: iso, title: fmt(iso) }, `${fmt(iso)}（${relative(iso)}）`);
 }
 
-/** Renders stored text: keeps line breaks and turns {{t:unix}} tokens into local times. */
+/** `inline code` spans, rendered the way Discord shows them (so {`裁判官`} becomes a role tag). */
+function appendInline(el, text) {
+  text.split(/`([^`\n]+)`/).forEach((part, index) => {
+    if (index % 2 === 1) el.append(h("code", null, part));
+    else if (part) el.append(document.createTextNode(part));
+  });
+}
+
+/** Renders stored text: keeps line breaks, inline code and {{t:unix}} tokens as local times. */
 function richText(text, tag = "div", cls = "rich") {
   const el = h(tag, { class: cls });
   const parts = String(text ?? "").split(/\{\{t:(\d+)\}\}/);
   parts.forEach((part, index) => {
-    if (index % 2 === 0) el.append(document.createTextNode(part));
+    if (index % 2 === 0) appendInline(el, part);
     else {
       const iso = new Date(Number(part) * 1000).toISOString();
       el.append(h("time", { datetime: iso }, fmt(iso)));
     }
   });
   return el;
+}
+
+/** A role or office, shown as {`裁判官`} like in the bot's Discord messages. */
+function roleTag(label) {
+  return h("span", { class: "role-tag" }, "{", h("code", null, label), "}");
 }
 
 /** The name's first character in a circle; used when there is no avatar or it fails to load. */
@@ -222,12 +235,12 @@ function renderHome() {
   document.title = "民主主義Bot";
   if (!me.user) {
     const features = [
-      ["🗳️ 選挙", "市民が国民代表（議員）を選ぶ。Webでの秘密投票、同数はくじ。"],
-      ["🏛️ 国会", "議長・首相の選出、法案の審議と記名採決、不信任・弾劾。"],
-      ["🎌 内閣", "首相が大臣・裁判官を任命し、法律を施行する。"],
-      ["⚖️ 裁判所", "提訴・判決・上告。確定した判決は自動で執行。"],
-      ["✍️ 請願", "市民の署名が集まると法案として国会へ。"],
-      ["👑 管理者派閥", "可決法案の裁可・拒否権・議会解散。すべて官報に記録。"],
+      ["選挙", "市民が国民代表（議員）を選ぶ。Webでの秘密投票、同数はくじ。"],
+      ["国会", "議長・首相の選出、法案の審議と記名採決、不信任・弾劾。"],
+      ["内閣", "首相が大臣・裁判官を任命し、法律を施行する。"],
+      ["裁判所", "提訴・判決・上告。確定した判決は自動で執行。"],
+      ["請願", "市民の署名が集まると法案として国会へ。"],
+      ["管理者派閥", "可決法案の裁可・拒否権・議会解散。すべて官報に記録。"],
     ];
     replace(app, 
       h(
@@ -253,7 +266,7 @@ function renderHome() {
           h(
             "a",
             { class: "card card-link", href: `/g/${g.id}`, "data-link": true },
-            h("div", { class: "card-title" }, "🏛️ ", g.name),
+            h("div", { class: "card-title" }, g.name),
             h("div", { class: "muted" }, `市民番号 第${g.citizenNumber}号`),
           ),
         ),
@@ -321,8 +334,7 @@ async function viewGovernment(guildId, root) {
       h(
         "div",
         { class: "office-label" },
-        h("span", { "aria-hidden": "true" }, def.emoji),
-        def.label,
+        roleTag(def.label),
         capacity && capacity > 1 ? h("span", { class: "muted small" }, `${holders.length}/${capacity}`) : null,
       ),
       holders.length
@@ -334,7 +346,7 @@ async function viewGovernment(guildId, root) {
                 "li",
                 { class: p.isMe ? "holder me" : "holder" },
                 person(p.holder),
-                p.title !== def.label ? h("span", { class: "chip" }, p.title) : null,
+                p.title !== def.label ? roleTag(p.title) : null,
                 p.expiresAt ? h("span", { class: "muted small" }, `任期 ${fmtDate(p.expiresAt)}まで`) : null,
               ),
             ),
@@ -361,12 +373,12 @@ async function viewGovernment(guildId, root) {
     h(
       "div",
       { class: "factions" },
-      faction("admin", "👑 管理者派閥", branch("元首・管理官", ["SOVEREIGN", "ADMINISTRATOR"])),
-      faction("representative", "🏛️ 国民代表派閥", [
+      faction("admin", "管理者派閥", branch("元首・管理官", ["SOVEREIGN", "ADMINISTRATOR"])),
+      faction("representative", "国民代表派閥", [
         branch("立法府（国会）", ["SPEAKER", "VICE_SPEAKER", "REPRESENTATIVE", "AIDE"]),
         branch("行政府（内閣）", ["PRIME_MINISTER", "DEPUTY_PRIME_MINISTER", "CHIEF_CABINET_SECRETARY", "MINISTER"]),
       ]),
-      faction("neutral", "⚖️ 独立機関", [
+      faction("neutral", "独立機関", [
         branch("司法府（裁判所）", ["CHIEF_JUSTICE", "JUDGE"]),
         branch("選挙管理委員会", ["ELECTION_COMMISSIONER", "ELECTION_COMMISSION_MEMBER"]),
       ]),
@@ -382,7 +394,7 @@ async function viewGovernment(guildId, root) {
           h(
             "li",
             null,
-            h("strong", null, `${c.emoji} ${c.label}`),
+            roleTag(c.label),
             " ",
             h("span", { class: "chip" }, c.factionLabel),
             " ",
@@ -438,7 +450,7 @@ function currentElection(guildId, e, viewer, reload) {
   if (e.status === "REGISTRATION") {
     card.append(notice("立候補を受け付けています。Discordで /election candidacy を実行すると立候補できます。投票は立候補締切の後に始まります。"));
   } else if (viewer?.voted) {
-    card.append(notice("✅ 投票済みです。秘密投票のため、あなたの投票先は記録されていません。", "ok"));
+    card.append(notice("投票済みです。秘密投票のため、あなたの投票先は記録されていません。", "ok"));
   } else if (viewer && !viewer.onRoll) {
     card.append(notice("選挙人名簿に登録されていないため投票できません（立候補締切までに市民登録した市民が対象です）。", "warn"));
   } else if (viewer?.canVote) {
@@ -737,7 +749,7 @@ function petitionCard(guildId, p, threshold, reload) {
       h("span", null, `提出者 ${p.creator.name}`),
       p.status === "OPEN" ? h("span", null, "締切: ", deadline(p.expiresAt)) : null,
       p.billNumber ? h("span", null, `第${p.billNumber}号議案として送付`) : null,
-      p.signedByMe ? h("span", null, "✅ 署名済み") : null,
+      p.signedByMe ? chip("署名済み", "COMPLETED") : null,
     ),
     sign ? h("div", { class: "row" }, sign) : null,
     status,

@@ -14,7 +14,7 @@ async function main(): Promise<void> {
     : Routes.applicationCommands(config.clientId);
 
   await rest.put(route, { body });
-  console.log(`✅ ${config.devGuildId ? `サーバー ${config.devGuildId}` : "全サーバー"}にコマンドを登録しました。`);
+  console.log(`[民主主義Bot] ${config.devGuildId ? `サーバー ${config.devGuildId}` : "全サーバー"}にコマンドを登録しました。`);
   console.log(`   みんなのコマンド: ${PUBLIC_COMMANDS.map((c) => `/${c.data.name}`).join(" ")}`);
   console.log(`   管理者専用コマンド: ${ADMIN_COMMANDS.map((c) => `/${c.data.name}`).join(" ")}（管理者にのみ表示）`);
 }

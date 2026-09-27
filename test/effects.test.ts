@@ -135,8 +135,9 @@ describe("Discordへの反映（アダプタ）", () => {
     const titles = discord.posts.filter((p) => p.channel === "announce").map((p) => p.title);
     assert.deepEqual(
       titles,
-      entries.map((e) => `📜 官報 第${e.number}号｜${e.title}`),
+      entries.map((e) => `官報 第${e.number}号｜${e.title}`),
     );
+    for (const post of discord.posts) assert.doesNotMatch(`${post.title ?? ""}${post.content ?? ""}`, /\p{Extended_Pictographic}/u);
   });
 
   it("法案ごとに議論スレッドを作り、スレッドIDを保存する", async () => {

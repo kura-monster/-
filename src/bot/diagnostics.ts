@@ -10,7 +10,7 @@ export async function diagnose(guild: Guild): Promise<string[]> {
   const me = await guild.members.fetchMe();
   const settings = await prisma.guild.findUnique({ where: { id: guild.id } });
   const lines: string[] = [];
-  const check = (ok: boolean, label: string, problem: string) => lines.push(ok ? `✅ ${label}` : `⚠️ ${label} — ${problem}`);
+  const check = (ok: boolean, label: string, problem: string) => lines.push(ok ? `\`OK\` ${label}` : `\`要確認\` ${label} — ${problem}`);
 
   check(me.permissions.has(P.ManageRoles), "ロールの管理", "役職ロールを付与できません");
   check(me.permissions.has(P.ModerateMembers), "メンバーのタイムアウト", "判決（タイムアウト）を執行できません");
@@ -39,7 +39,7 @@ export async function diagnose(guild: Guild): Promise<string[]> {
   ];
   for (const [label, channelId, threads] of channels) {
     if (!channelId) {
-      lines.push(`➖ ${label}: 未設定`);
+      lines.push(`\`未設定\` ${label}`);
       continue;
     }
     const channel = guild.channels.cache.get(channelId);
@@ -55,6 +55,6 @@ export async function diagnose(guild: Guild): Promise<string[]> {
   }
 
   check(Boolean(config.clientSecret), "Webログイン（DISCORD_CLIENT_SECRET）", "未設定のためWeb投票にログインできません");
-  lines.push(`ℹ️ Webダッシュボード: ${config.webBaseUrl}`);
+  lines.push(`\`情報\` Webダッシュボード: ${config.webBaseUrl}`);
   return lines;
 }

@@ -42,7 +42,7 @@ export const petitionCommand: BotCommand = {
     switch (routeOf(interaction)) {
       case "create": {
         const { petition, submitted } = await createPetition(actor, interaction.options.getString("title", true), interaction.options.getString("content", true));
-        const body = embed(COLOR.petition, `✍️ 請願 第${petition.number}号「${petition.title}」`)
+        const body = embed(COLOR.petition, `請願 第${petition.number}号「${petition.title}」`)
           .setDescription(truncate(petition.content, 3000))
           .addFields(field("提出者", mention(actor.discordId), true), field("署名の締切", withRelative(petition.expiresAt)))
           .setFooter({ text: submitted ? "必要署名数に達したため国会へ送付されました" : "/petition sign またはWebで署名できます" });
@@ -52,7 +52,7 @@ export const petitionCommand: BotCommand = {
 
       case "sign": {
         const result = await signPetition(actor.guildId, actor.discordId, interaction.options.getInteger("petition", true));
-        const body = embed(COLOR.petition, `✍️ 請願 第${result.petition.number}号「${result.petition.title}」に署名`).setDescription(
+        const body = embed(COLOR.petition, `請願 第${result.petition.number}号「${result.petition.title}」に署名`).setDescription(
           result.submitted
             ? `署名が ${result.signatures}筆に達し、国会へ法案として送付されました！`
             : `現在 ${result.signatures}／${result.threshold}筆`,
@@ -63,7 +63,7 @@ export const petitionCommand: BotCommand = {
 
       case "list": {
         const { petitions, threshold } = await listPetitions(actor.guildId, actor.discordId);
-        const body = embed(COLOR.petition, "✍️ 請願一覧").setDescription(
+        const body = embed(COLOR.petition, "請願一覧").setDescription(
           petitions.length === 0
             ? "請願はまだありません。`/petition create` で作成できます。"
             : petitions
@@ -81,7 +81,7 @@ export const petitionCommand: BotCommand = {
         const detail = await petitionDetail(actor.guildId, interaction.options.getInteger("petition", true));
         if (!detail) fail("請願が見つかりません。");
         const { petition, threshold } = detail;
-        const body = embed(COLOR.petition, `✍️ 請願 第${petition.number}号「${petition.title}」`)
+        const body = embed(COLOR.petition, `請願 第${petition.number}号「${petition.title}」`)
           .setDescription(truncate(petition.content, 2500))
           .addFields(
             field("状態", PETITION_STATUS_LABEL[petition.status as PetitionStatus], true),

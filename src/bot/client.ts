@@ -53,8 +53,8 @@ export function createBot(onReady?: (client: Client<true>) => void): Client {
   });
 
   client.once(Events.ClientReady, (ready) => {
-    console.log(`🏛️ 民主主義Bot 起動: ${ready.user.tag}（${ready.guilds.cache.size}サーバー）`);
-    console.log(`🔗 招待URL: ${inviteUrl(ready.user.id)}`);
+    console.log(`[民主主義Bot] 起動: ${ready.user.tag}（${ready.guilds.cache.size}サーバー）`);
+    console.log(`[民主主義Bot] 招待URL: ${inviteUrl(ready.user.id)}`);
     for (const guild of ready.guilds.cache.values()) {
       ensureGuild(guild.id, guild.name).catch((error) => console.error("[guild]", error));
     }

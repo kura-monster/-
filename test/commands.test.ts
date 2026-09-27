@@ -3,6 +3,8 @@ import { before, describe, it } from "node:test";
 import { ApplicationCommandOptionType, InteractionContextType, PermissionFlagsBits, type APIApplicationCommandOption } from "discord.js";
 import { prisma } from "../src/lib/prisma";
 import { ADMIN_COMMANDS, COMMANDS, PUBLIC_COMMANDS } from "../src/bot/commands";
+import { MANAGED_KEYS, roleSpec } from "../src/bot/roles";
+import { roleTag } from "../src/core/text";
 import { autocomplete, run, type FakePerson } from "./discord-harness";
 import { GUILD, setupGuild } from "./helpers";
 
@@ -55,6 +57,21 @@ describe("コマンド定義（Discord APIの制約）", () => {
       const total = json.name.length + json.description.length + charCount(json.options);
       assert.ok(total <= 4000, `/${json.name} is ${total} chars (max 4000)`);
       assert.deepEqual(json.contexts, [InteractionContextType.Guild], `/${json.name} must be guild-only`);
+    }
+  });
+
+  it("役職は絵文字を使わず、Discordロール名は {裁判官} 形式", () => {
+    for (const key of MANAGED_KEYS) {
+      const { name } = roleSpec(key);
+      assert.match(name, /^\{[^{}]+\}$/, `role name ${name}`);
+      assert.doesNotMatch(name, /\p{Extended_Pictographic}/u);
+    }
+    assert.equal(roleSpec("JUDGE").name, "{裁判官}");
+    assert.equal(roleSpec("CITIZEN").name, "{市民}");
+    assert.equal(roleTag("裁判官"), "{`裁判官`}");
+    assert.equal(roleTag("外`務"), "{`外'務`}", "バッククォートはコード表示を壊さないよう置き換える");
+    for (const command of COMMANDS) {
+      assert.doesNotMatch(JSON.stringify(command.data.toJSON()), /\p{Extended_Pictographic}/u, `/${command.data.name} definition`);
     }
   });
 
@@ -111,7 +128,7 @@ describe("コマンド操作の通し（ハーネス）", () => {
     await ok(bob, "parliament", "elect", { office: "PRIME_MINISTER", candidate: bob });
     assert.match((await ok(bob, "cabinet", "appoint", { position: "MINISTER", user: carol, title: "外務" })).text, /外務大臣/);
     assert.match((await ok(carol, "cabinet", "list")).text, /外務大臣/);
-    assert.match((await ok(carol, "gov", "overview")).text, /内閣総理大臣: <@id-bob>/);
+    assert.match((await ok(carol, "gov", "overview")).text, /\{`内閣総理大臣`\} <@id-bob>/);
 
     assert.match((await ok(carol, "parliament", "bill submit", { title: "雑談部屋増設法", content: "雑談チャンネルを1つ増やす" })).text, /内閣提出/);
     const choices = await autocomplete(alice, "parliament", "bill open", "bill", "");
@@ -144,7 +161,7 @@ describe("コマンド操作の通し（ハーネス）", () => {
     assert.equal((await run(bob, "parliament", "aide appoint", { user: { name: "secretary" } })).error, true, "未登録の人は補佐官にできない");
     await ok({ name: "secretary" }, "citizen", "register");
     assert.match((await ok(bob, "parliament", "aide appoint", { user: { name: "secretary" } })).text, /補佐官（bob議員付）/);
-    assert.match((await ok(carol, "parliament", "members")).text, /補佐官: secretary/);
+    assert.match((await ok(carol, "parliament", "members")).text, /\{`補佐官`\} secretary/);
     assert.match((await ok(carol, "citizen", "profile")).text, /外務大臣/);
     const own = await autocomplete(carol, "citizen", "resign", "position", "");
     assert.match(own[0].name, /外務大臣/);
@@ -158,7 +175,7 @@ describe("コマンド操作の通し（ハーネス）", () => {
     const citizenHelp = await ok(carol, "help", "");
     assert.equal(citizenHelp.ephemeral, true);
     assert.doesNotMatch(citizenHelp.text, /管理者専用/);
-    assert.match((await ok(alice, "help", "")).text, /✅ 🔔 議長・副議長/);
+    assert.match((await ok(alice, "help", "")).text, /\{`議長`\}・\{`副議長`\}　`使用可`/);
     assert.match((await ok(admin, "help", "")).text, /管理者専用/);
   });
 

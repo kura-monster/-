@@ -25,7 +25,6 @@ export const AIDES_PER_REPRESENTATIVE = 2;
 export interface PositionDef {
   key: PositionKey;
   label: string;
-  emoji: string;
   /** 序列: lower is higher. */
   rank: number;
   faction: Faction;
@@ -41,7 +40,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   SOVEREIGN: {
     key: "SOVEREIGN",
     label: "元首",
-    emoji: "👑",
     rank: 1,
     faction: "ADMIN",
     branch: "ADMIN",
@@ -53,7 +51,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   PRIME_MINISTER: {
     key: "PRIME_MINISTER",
     label: "内閣総理大臣",
-    emoji: "🎌",
     rank: 2,
     faction: "REPRESENTATIVE",
     branch: "EXECUTIVE",
@@ -65,7 +62,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   SPEAKER: {
     key: "SPEAKER",
     label: "議長",
-    emoji: "🔔",
     rank: 3,
     faction: "REPRESENTATIVE",
     branch: "LEGISLATIVE",
@@ -77,7 +73,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   CHIEF_JUSTICE: {
     key: "CHIEF_JUSTICE",
     label: "最高裁判所長官",
-    emoji: "⚖️",
     rank: 4,
     faction: "NEUTRAL",
     branch: "JUDICIAL",
@@ -89,7 +84,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   ADMINISTRATOR: {
     key: "ADMINISTRATOR",
     label: "管理官",
-    emoji: "🛡️",
     rank: 5,
     faction: "ADMIN",
     branch: "ADMIN",
@@ -101,7 +95,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   VICE_SPEAKER: {
     key: "VICE_SPEAKER",
     label: "副議長",
-    emoji: "🎙️",
     rank: 6,
     faction: "REPRESENTATIVE",
     branch: "LEGISLATIVE",
@@ -113,7 +106,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   DEPUTY_PRIME_MINISTER: {
     key: "DEPUTY_PRIME_MINISTER",
     label: "副総理",
-    emoji: "🎖️",
     rank: 7,
     faction: "REPRESENTATIVE",
     branch: "EXECUTIVE",
@@ -125,7 +117,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   CHIEF_CABINET_SECRETARY: {
     key: "CHIEF_CABINET_SECRETARY",
     label: "内閣官房長官",
-    emoji: "📣",
     rank: 8,
     faction: "REPRESENTATIVE",
     branch: "EXECUTIVE",
@@ -137,7 +128,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   MINISTER: {
     key: "MINISTER",
     label: "国務大臣",
-    emoji: "💼",
     rank: 9,
     faction: "REPRESENTATIVE",
     branch: "EXECUTIVE",
@@ -149,7 +139,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   ELECTION_COMMISSIONER: {
     key: "ELECTION_COMMISSIONER",
     label: "選挙管理委員長",
-    emoji: "🗳️",
     rank: 10,
     faction: "NEUTRAL",
     branch: "ELECTORAL",
@@ -161,7 +150,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   JUDGE: {
     key: "JUDGE",
     label: "裁判官",
-    emoji: "🧑‍⚖️",
     rank: 11,
     faction: "NEUTRAL",
     branch: "JUDICIAL",
@@ -173,7 +161,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   REPRESENTATIVE: {
     key: "REPRESENTATIVE",
     label: "国民代表（議員）",
-    emoji: "🏛️",
     rank: 12,
     faction: "REPRESENTATIVE",
     branch: "LEGISLATIVE",
@@ -185,7 +172,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   ELECTION_COMMISSION_MEMBER: {
     key: "ELECTION_COMMISSION_MEMBER",
     label: "選挙管理委員",
-    emoji: "📋",
     rank: 13,
     faction: "NEUTRAL",
     branch: "ELECTORAL",
@@ -197,7 +183,6 @@ export const POSITIONS: Record<PositionKey, PositionDef> = {
   AIDE: {
     key: "AIDE",
     label: "補佐官",
-    emoji: "📎",
     rank: 14,
     faction: "REPRESENTATIVE",
     branch: "LEGISLATIVE",

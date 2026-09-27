@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { nextNumber, transact, type Db, type Tx } from "../core/db";
 import { fail } from "../core/errors";
 import type { DomainEvent } from "../core/events";
+import { roleTag } from "../core/text";
 import { DAY } from "../core/time";
 import { effectivePenalty } from "./court-rules";
 import { publish } from "./gazette";
@@ -188,7 +189,7 @@ export async function resignPosition(actor: Actor, positionId: string, now: Date
     await publish(tx, events, actor.guildId, {
       category: "PERSONNEL",
       title: `辞職: ${citizen.displayName}（${position.title}）`,
-      body: [`${citizen.displayName} が${position.title}を辞職しました。`, cascaded.length > 0 ? describeEnded(cascaded) : null]
+      body: [`${citizen.displayName} が ${roleTag(position.title)} を辞職しました。`, cascaded.length > 0 ? describeEnded(cascaded) : null]
         .filter(Boolean)
         .join("\n"),
     });

@@ -17,6 +17,7 @@ import {
 } from "../core/constants";
 import { ADMIN_FACTION_KEYS, CABINET_KEYS, type PositionKey } from "../core/positions";
 import { describeTally, officeMajority, tallyVotes, type BillTally } from "../core/tally";
+import { roleTag } from "../core/text";
 import { addDays, timeToken } from "../core/time";
 import { requireCitizen, requireTargetCitizen } from "./citizen";
 import { publish } from "./gazette";
@@ -93,8 +94,8 @@ export async function voteForOffice(actor: Actor, office: Office, candidateDisco
         category: office === "PRIME_MINISTER" ? "CABINET" : "PERSONNEL",
         title: office === "PRIME_MINISTER" ? `内閣総理大臣の指名: ${leader.citizen.displayName}` : `${label}の選出: ${leader.citizen.displayName}`,
         body: [
-          `国会は ${leader.citizen.displayName} を${label}に選出しました（${leader.votes}票／在籍議員 ${seated.size}名・過半数 ${majority}票）。`,
-          office === "PRIME_MINISTER" ? "内閣総理大臣は /cabinet appoint で閣僚を任命できます。" : null,
+          `国会は ${leader.citizen.displayName} を ${roleTag(label)} に選出しました（${leader.votes}票／在籍議員 ${seated.size}名・過半数 ${majority}票）。`,
+          office === "PRIME_MINISTER" ? `${roleTag("内閣総理大臣")}は /cabinet appoint で閣僚を任命できます。` : null,
         ]
           .filter(Boolean)
           .join("\n"),
@@ -444,7 +445,7 @@ export async function moveImpeachment(actor: Actor, targetDiscordId: string, rea
     await publish(tx, events, actor.guildId, {
       category: "PERSONNEL",
       title: `弾劾決議案の提出（第${bill.number}号）`,
-      body: `${citizen.displayName} 議員が ${target.displayName} の弾劾を発議しました。\n理由: ${reason}\n出席議員の3分の2以上の賛成で全役職（元首・管理官を除く）から罷免されます。締切: ${timeToken(votingEndsAt)}`,
+      body: `${citizen.displayName} 議員が ${target.displayName} の弾劾を発議しました。\n理由: ${reason}\n出席議員の3分の2以上の賛成で全役職（${roleTag("元首")}・${roleTag("管理官")}を除く）から罷免されます。締切: ${timeToken(votingEndsAt)}`,
       linkPath: parliamentLink(actor.guildId),
     });
     return bill;
@@ -471,7 +472,7 @@ export async function appointAide(actor: Actor, targetDiscordId: string, targetI
     await publish(tx, events, actor.guildId, {
       category: "PERSONNEL",
       title: `補佐官の任命: ${target.displayName}`,
-      body: `${representative.displayName} 議員が ${target.displayName} を補佐官に任命しました。`,
+      body: `${roleTag("国民代表（議員）")} ${representative.displayName} が ${target.displayName} を ${roleTag(position.title)} に任命しました。`,
     });
     return position;
   });
@@ -489,7 +490,7 @@ export async function dismissAide(actor: Actor, targetDiscordId: string, now: Da
     await publish(tx, events, actor.guildId, {
       category: "PERSONNEL",
       title: `補佐官の解任: ${target.displayName}`,
-      body: `${representative.displayName} 議員が補佐官 ${target.displayName} を解任しました。`,
+      body: `${roleTag("国民代表（議員）")} ${representative.displayName} が ${roleTag("補佐官")} ${target.displayName} を解任しました。`,
     });
     return position;
   });
