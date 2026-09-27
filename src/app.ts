@@ -46,6 +46,8 @@ async function prepareDatabase(): Promise<boolean> {
 
 /** Starts everything. `webSocketProxy` is the proxy src/index.ts routed WebSockets through before this was loaded. */
 export async function start(webSocketProxy: string | null): Promise<void> {
+  // A background task that fails without anyone waiting for it is logged instead of stopping the whole bot.
+  process.on("unhandledRejection", (reason) => console.error("[エラー] 処理されなかったエラー:", reason));
   if (!(await prepareDatabase())) process.exit(1);
 
   try {

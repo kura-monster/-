@@ -28,14 +28,49 @@ import { recordPenaltyOutcome } from "../services/court";
 import { describeDiscordError, syncMember } from "./roles";
 import { COLOR, embed, field, linkRow, mention, renderTokens, withRelative } from "./ui";
 
-const queues = new Map<string, Promise<void>>();
+/** How long one post, or one member's role update, may take before the queue moves on without it. */
+const STEP_TIMEOUT_MS = { post: 2 * 60_000, member: 30_000 };
+let timeouts = STEP_TIMEOUT_MS;
 
-/** Discord side effects run one at a time per guild, so gazette posts keep their order. */
-function enqueue(guildId: string, task: () => Promise<void>): void {
-  const previous = queues.get(guildId) ?? Promise.resolve();
-  const next = previous.then(task).catch((error) => console.error(`[discord ${guildId}]`, error));
-  queues.set(guildId, next);
+/** For tests: shorter limits than the real ones. */
+export function setEffectTimeoutsForTests(value: typeof STEP_TIMEOUT_MS = STEP_TIMEOUT_MS): void {
+  timeouts = value;
 }
+
+/** Waits for `work` at most `ms`; after that the caller goes on (the work itself may still finish later). */
+async function atMost(work: Promise<unknown>, ms: number, onTimeout: () => void): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      resolve();
+    }, ms);
+  });
+  try {
+    await Promise.race([work, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Discord side effects run one at a time per guild and per kind: posts (gazette, threads, notices) keep their order in
+ * one queue, role updates run in another. Role updates can crawl under Discord's rate limit (say, after registering a
+ * whole server at once), and posts must not wait behind them.
+ */
+class GuildQueue {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  constructor(private readonly label: string) {}
+
+  push(guildId: string, task: () => Promise<void>): void {
+    const run = () => task().catch((error) => console.error(`[エラー] ${this.label}に失敗しました（サーバー ${guildId}）:`, error));
+    this.tails.set(guildId, (this.tails.get(guildId) ?? Promise.resolve()).then(run));
+  }
+}
+
+const posts = new GuildQueue("Discord への投稿");
+const roleUpdates = new GuildQueue("役職ロールの反映");
 
 async function sendTo(client: Client, channelId: string | null | undefined, message: MessageCreateOptions): Promise<void> {
   if (!channelId) return;
@@ -176,21 +211,27 @@ const pendingRoleSync = new Map<string, Set<string>>();
 export function attachDiscordEffects(client: Client): () => void {
   return onDomainEvent((event) => {
     if (event.type !== "rolesChanged") {
-      enqueue(event.guildId, () => handle(client, event));
+      // A post that hangs is given up on, so it cannot hold up every post queued after it.
+      posts.push(event.guildId, () =>
+        atMost(handle(client, event), timeouts.post, () =>
+          console.warn(`[注意] Discord への投稿（${event.type}）が ${timeouts.post / 1000} 秒たっても終わらないため、次の投稿に進みます。`),
+        ),
+      );
       return;
     }
     let pending = pendingRoleSync.get(event.guildId);
     if (!pending) {
       pending = new Set();
       pendingRoleSync.set(event.guildId, pending);
-      enqueue(event.guildId, async () => {
+      roleUpdates.push(event.guildId, async () => {
         const ids = [...(pendingRoleSync.get(event.guildId) ?? [])];
         pendingRoleSync.delete(event.guildId);
         const guild = client.guilds.cache.get(event.guildId);
         if (!guild) return;
         for (const id of ids) {
-          await syncMember(guild, id).catch((error) =>
-            console.warn(`[roles ${event.guildId}] ${id}: ${describeDiscordError(error)}`),
+          const sync = syncMember(guild, id).catch((error) => console.warn(`[roles ${event.guildId}] ${id}: ${describeDiscordError(error)}`));
+          await atMost(sync, timeouts.member, () =>
+            console.warn(`[注意] ${id} の役職ロールの反映が ${timeouts.member / 1000} 秒たっても終わらないため、次のメンバーに進みます。`),
           );
         }
       });

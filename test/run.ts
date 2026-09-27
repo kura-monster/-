@@ -16,3 +16,4 @@ import "./command-sync.test";
 import "./autosetup.test";
 import "./office-election.test";
 import "./bulk-register.test";
+import "./effects-queue.test";
