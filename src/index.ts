@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { config } from "./config";
 import { createBot } from "./bot/client";
+import { loginErrorHint, watchConnection } from "./bot/connection";
 import { attachDiscordEffects } from "./bot/effects";
 import { databaseFile, findSchemaProblem, pushSchema } from "./lib/prisma";
 import { startScheduler } from "./services/scheduler";
@@ -68,12 +69,13 @@ async function main(): Promise<void> {
 
   const client = createBot(() => startScheduler());
   attachDiscordEffects(client);
+  watchConnection(client);
+  console.log("[民主主義Bot] Discord に接続しています…");
   try {
     await client.login(config.discordToken);
   } catch (error) {
-    if (String(error).toLowerCase().includes("intent")) {
-      console.error("[エラー] Discord Developer Portal の Bot 設定で「SERVER MEMBERS INTENT」を有効にしてください。");
-    }
+    const hint = loginErrorHint(error);
+    if (hint) console.error(`[エラー] ${hint}`);
     throw error;
   }
 }

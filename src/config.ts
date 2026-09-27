@@ -49,13 +49,18 @@ export function resolvePort(source: Record<string, string | undefined>): { port:
 const webBaseUrl = normalizeBaseUrl(env.WEB_BASE_URL);
 const { port: webPort, from: webPortFrom, others: webPortOthers } = resolvePort(env);
 
+/** Values typed into a hosting panel can keep the quotes (or the "Bot " prefix) that a .env file would have dropped. */
+export function cleanSecret(raw: string | undefined): string {
+  return (raw ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+}
+
 let cachedSessionSecret: string | undefined;
 
 export const config = {
   isProduction,
-  discordToken: env.DISCORD_TOKEN ?? "",
-  clientId: env.DISCORD_CLIENT_ID ?? "",
-  clientSecret: env.DISCORD_CLIENT_SECRET ?? "",
+  discordToken: cleanSecret(env.DISCORD_TOKEN).replace(/^Bot\s+/i, ""),
+  clientId: cleanSecret(env.DISCORD_CLIENT_ID),
+  clientSecret: cleanSecret(env.DISCORD_CLIENT_SECRET),
   devGuildId: env.DISCORD_GUILD_ID || undefined,
   webPort,
   webPortFrom,

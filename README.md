@@ -157,6 +157,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 | Cloudflare の **502 Bad gateway** | 起動ログのポートが、ドメイン（ホスティングの転送設定や Cloudflare Tunnel）の転送先ポートと同じか。`[エラー] ポート ○○ は別のプログラムが使用中` が出ていないか |
 | Discord の画面に「Invalid OAuth2 redirect_uri」 | Developer Portal の OAuth2 → Redirects に `WEB_BASE_URL/auth/callback` を完全一致で登録したか |
 | 「ログインの検証に失敗しました」 | サイトを `WEB_BASE_URL` と同じドメインで開いているか（IPアドレスや別のドメインで開くとCookieが届きません） |
+| Bot がオンラインにならない | 起動ログの `[エラー]` 行を確認。トークン・SERVER MEMBERS INTENT・ログイン回数の上限は、原因と対処法をすぐ表示します。45秒たっても接続が終わらない場合は、直近の接続ログと、止まっている段階（Discord の API／ゲートウェイ／ログイン）を表示します |
 | 起動ログに `DISCORD_TOKEN が未設定` や `http://localhost:3000` | 設定が読み込まれていない。GitHub から取り込むと `.env` は消えるので、管理画面の環境変数に設定する |
 | 起動ログに `[エラー] データベースの構造が最新ではありません` | データが消える変更が必要。データベースファイルをバックアップしてから `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
 

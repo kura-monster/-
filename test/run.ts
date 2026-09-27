@@ -11,3 +11,4 @@ import "./commands.test";
 import "./web.test";
 import "./effects.test";
 import "./deploy.test";
+import "./connection.test";
