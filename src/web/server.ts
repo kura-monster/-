@@ -1,41 +1,86 @@
-import express from "express";
+import path from "node:path";
+import express, { type NextFunction, type Request, type Response } from "express";
 import session from "express-session";
-import path from "path";
-import { authRoutes } from "./routes/auth";
-import { electionRoutes } from "./routes/elections";
-import { dashboardRoutes } from "./routes/dashboard";
-import { apiRoutes } from "./routes/api";
-import "dotenv/config";
+import { prisma } from "../lib/prisma";
+import { config, sessionSecret } from "../config";
+import { DomainError } from "../core/errors";
+import { DAY } from "../core/time";
+import { apiRouter } from "./api";
+import { SESSION_COOKIE, authRouter } from "./auth";
+import { PrismaSessionStore } from "./session-store";
 
-const app = express();
+const PUBLIC_DIR = path.resolve(__dirname, "../../public");
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "img-src 'self' https://cdn.discordapp.com data:",
+  "style-src 'self'",
+  "script-src 'self'",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join("; ");
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "democracy-bot-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 },
-  })
-);
+function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
+  res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "same-origin");
+  next();
+}
 
-app.use("/auth", authRoutes);
-app.use("/elections", electionRoutes);
-app.use("/dashboard", dashboardRoutes);
-app.use("/api", apiRoutes);
+export function createWebApp(): express.Express {
+  const app = express();
+  app.disable("x-powered-by");
+  if (config.trustProxy) app.set("trust proxy", 1);
+  app.use(securityHeaders);
+  app.use(express.json({ limit: "16kb" }));
+  app.use(
+    session({
+      name: SESSION_COOKIE,
+      secret: sessionSecret(),
+      store: new PrismaSessionStore(),
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: config.webBaseUrl.startsWith("https://"),
+        maxAge: 7 * DAY,
+      },
+    }),
+  );
 
-app.get("/", (_req, res) => {
-  res.redirect("/dashboard");
-});
+  app.use("/auth", authRouter);
+  app.use("/api", apiRouter);
+  app.use(express.static(PUBLIC_DIR, { index: false }));
 
-export { app };
+  const page = (_req: Request, res: Response) => res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  app.get("/", page);
+  app.get("/g/:guildId", page);
+  app.get("/g/:guildId/:tab", page);
 
-if (require.main === module) {
-  const port = process.env.WEB_PORT || 3000;
-  app.listen(port, () => {
-    console.log(`🌐 Webサーバー起動: http://localhost:${port}`);
+  // Links posted by earlier versions of the bot.
+  app.get("/elections/:id", async (req: Request<{ id: string }>, res) => {
+    const election = await prisma.election.findUnique({ where: { id: req.params.id } });
+    res.redirect(election ? `/g/${election.guildId}/election` : "/");
   });
+
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "見つかりません。" });
+  });
+  app.use((_req, res) => {
+    res.status(404).sendFile(path.join(PUBLIC_DIR, "index.html"));
+  });
+
+  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof DomainError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error("[web]", error);
+    res.status(500).json({ error: "サーバーエラーが発生しました。" });
+  });
+  return app;
 }

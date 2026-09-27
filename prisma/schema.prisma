@@ -7,150 +7,323 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Guild {
-  id                 String   @id // Discord guild ID
-  name               String
-  electionChannelId  String?
-  debateChannelId    String?
-  courtChannelId     String?
-  announceChannelId  String?
-  termLengthDays     Int      @default(30)
-  maxRepresentatives Int      @default(5)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+// SQLite has no enums: status/kind columns hold the string constants defined in src/core/constants.ts.
 
-  citizens  Citizen[]
-  elections Election[]
-  positions Position[]
-  proposals Proposal[]
-  trials    Trial[]
+model Guild {
+  id                      String   @id
+  name                    String
+  announceChannelId       String?
+  debateChannelId         String?
+  courtChannelId          String?
+  electionChannelId       String?
+  seats                   Int      @default(5)
+  termDays                Int      @default(30)
+  registrationDays        Int      @default(2)
+  votingDays              Int      @default(3)
+  billVotingDays          Int      @default(3)
+  sanctionDays            Int      @default(3)
+  petitionThreshold       Int      @default(5)
+  petitionDays            Int      @default(14)
+  appealHours             Int      @default(24)
+  minAccountAgeDays       Int      @default(7)
+  minMembershipDays       Int      @default(0)
+  allowAdminParticipation Boolean  @default(false)
+  enforcePenalties        Boolean  @default(true)
+  autoElection            Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  counters     Counter[]
+  citizens     Citizen[]
+  positions    Position[]
+  managedRoles ManagedRole[]
+  elections    Election[]
+  officeVotes  OfficeVote[]
+  bills        Bill[]
+  cases        CourtCase[]
+  petitions    Petition[]
+  gazette      GazetteEntry[]
+}
+
+model Counter {
+  guildId String
+  kind    String
+  value   Int    @default(0)
+  guild   Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, kind])
 }
 
 model Citizen {
-  id        String   @id @default(cuid())
-  discordId String
-  guildId   String
-  guild     Guild    @relation(fields: [guildId], references: [id])
-  joinedAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  guildId       String
+  discordId     String
+  number        Int
+  displayName   String
+  avatarUrl     String?
+  registeredAt  DateTime  @default(now())
+  active        Boolean   @default(true)
+  revokedAt     DateTime?
+  revokedReason String?
+  guild         Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
-  positions     Position[]
-  candidacies   Candidate[]
-  votes         Vote[]
-  proposalsMade Proposal[]     @relation("proposer")
-  proposalVotes ProposalVote[]
-  trialsFiled   Trial[]        @relation("plaintiff")
-  trialsAgainst Trial[]        @relation("defendant")
-  trialsJudged  Trial[]        @relation("judge")
+  positions          Position[]          @relation("holder")
+  appointedPositions Position[]          @relation("appointer")
+  candidacies        Candidate[]
+  voterRecords       VoterRecord[]
+  officeVotesCast    OfficeVote[]        @relation("officeVoter")
+  officeVotesGot     OfficeVote[]        @relation("officeCandidate")
+  billsProposed      Bill[]              @relation("billProposer")
+  billsTargeting     Bill[]              @relation("billTarget")
+  billVotes          BillVote[]
+  casesAsPlaintiff   CourtCase[]         @relation("plaintiff")
+  casesAsDefendant   CourtCase[]         @relation("defendant")
+  casesAsJudge       CourtCase[]         @relation("judge")
+  casesAsAppellant   CourtCase[]         @relation("appellant")
+  casesAsAppealJudge CourtCase[]         @relation("appealJudge")
+  petitions          Petition[]
+  signatures         PetitionSignature[]
 
-  @@unique([discordId, guildId])
+  @@unique([guildId, discordId])
+  @@unique([guildId, number])
 }
 
-// REPRESENTATIVE=議員, MINISTER=大臣, AIDE=補佐官, JUDGE=裁判官
+// A row per term of office; endedAt = null means currently serving. Ended rows form the citizen's career history.
 model Position {
-  id        String   @id @default(cuid())
-  type      String // REPRESENTATIVE | MINISTER | AIDE | JUDGE
-  title     String
-  citizenId String
-  citizen   Citizen  @relation(fields: [citizenId], references: [id])
-  guildId   String
-  guild     Guild    @relation(fields: [guildId], references: [id])
-  appointedAt DateTime @default(now())
-  expiresAt   DateTime?
-  isActive    Boolean  @default(true)
+  id            String    @id @default(cuid())
+  guildId       String
+  citizenId     String
+  key           String
+  title         String
+  source        String
   appointedById String?
+  startedAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  endedAt       DateTime?
+  endReason     String?
+  guild         Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  citizen       Citizen   @relation("holder", fields: [citizenId], references: [id], onDelete: Cascade)
+  appointedBy   Citizen?  @relation("appointer", fields: [appointedById], references: [id], onDelete: SetNull)
+
+  @@index([guildId, key, endedAt])
+  @@index([citizenId, endedAt])
 }
 
-// REGISTRATION=立候補受付, VOTING=投票中, COMPLETED=終了, CANCELLED=中止
-model Election {
-  id                String   @id @default(cuid())
-  guildId           String
-  guild             Guild    @relation(fields: [guildId], references: [id])
-  title             String
-  description       String?
-  status            String   @default("REGISTRATION")
-  seats             Int      @default(1)
-  registrationStart DateTime
-  registrationEnd   DateTime
-  votingStart       DateTime
-  votingEnd         DateTime
-  createdAt         DateTime @default(now())
+model ManagedRole {
+  guildId String
+  key     String
+  roleId  String
+  guild   Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
-  candidates Candidate[]
-  votes      Vote[]
+  @@id([guildId, key])
+}
+
+model Election {
+  id                 String        @id @default(cuid())
+  guildId            String
+  number             Int
+  kind               String
+  title              String
+  description        String?
+  seats              Int
+  status             String        @default("REGISTRATION")
+  registrationEndsAt DateTime
+  votingEndsAt       DateTime
+  createdAt          DateTime      @default(now())
+  decidedAt          DateTime?
+  cancelReason       String?
+  lotteryUsed        Boolean       @default(false)
+  guild              Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  candidates         Candidate[]
+  voterRecords       VoterRecord[]
+  ballots            Ballot[]
+
+  @@unique([guildId, number])
+  @@index([guildId, status])
 }
 
 model Candidate {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   electionId   String
-  election     Election @relation(fields: [electionId], references: [id])
   citizenId    String
-  citizen      Citizen  @relation(fields: [citizenId], references: [id])
   manifesto    String?
-  registeredAt DateTime @default(now())
-
-  votes Vote[]
+  registeredAt DateTime  @default(now())
+  withdrawnAt  DateTime?
+  voteCount    Int?
+  elected      Boolean   @default(false)
+  election     Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  citizen      Citizen   @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  ballots      Ballot[]
 
   @@unique([electionId, citizenId])
 }
 
-model Vote {
-  id          String   @id @default(cuid())
+// Secret ballot: VoterRecord proves who voted, Ballot holds the choice. The two are never linked.
+model VoterRecord {
+  electionId String
+  citizenId  String
+  election   Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  citizen    Citizen  @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+
+  @@id([electionId, citizenId])
+}
+
+model Ballot {
+  id          String    @id @default(uuid())
   electionId  String
-  election    Election @relation(fields: [electionId], references: [id])
-  citizenId   String
-  citizen     Citizen  @relation(fields: [citizenId], references: [id])
   candidateId String
-  candidate   Candidate @relation(fields: [candidateId], references: [id])
-  votedAt     DateTime  @default(now())
+  election    Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  @@unique([electionId, citizenId])
+  @@index([electionId])
 }
 
-// DISCUSSION=議論中, VOTING=投票中, APPROVED=承認, REJECTED=否決, IMPLEMENTED=実施済
-model Proposal {
-  id         String   @id @default(cuid())
+// Recorded votes of representatives for Speaker / Vice Speaker / Prime Minister.
+model OfficeVote {
+  guildId     String
+  office      String
+  voterId     String
+  candidateId String
+  guild       Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  voter       Citizen @relation("officeVoter", fields: [voterId], references: [id], onDelete: Cascade)
+  candidate   Citizen @relation("officeCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, office, voterId])
+}
+
+model Bill {
+  id               String     @id @default(cuid())
+  guildId          String
+  number           Int
+  kind             String
+  origin           String
+  title            String
+  content          String
+  proposerId       String
+  targetId         String?
+  status           String     @default("DELIBERATION")
+  round            Int        @default(1)
+  requiredMajority String     @default("MAJORITY")
+  votingEndsAt     DateTime?
+  sanctionDeadline DateTime?
+  decidedAt        DateTime?
+  outcomeNote      String?
+  vetoReason       String?
+  implementedNote  String?
+  threadId         String?
+  petitionId       String?    @unique
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  guild            Guild      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  proposer         Citizen    @relation("billProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+  target           Citizen?   @relation("billTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  petition         Petition?  @relation(fields: [petitionId], references: [id], onDelete: SetNull)
+  votes            BillVote[]
+
+  @@unique([guildId, number])
+  @@index([guildId, status])
+}
+
+model BillVote {
+  billId    String
+  citizenId String
+  round     Int
+  choice    String
+  votedAt   DateTime @default(now())
+  bill      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  citizen   Citizen  @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+
+  @@id([billId, citizenId, round])
+}
+
+model CourtCase {
+  id             String    @id @default(cuid())
+  guildId        String
+  number         Int
+  title          String
+  claim          String
+  plaintiffId    String
+  defendantId    String
+  judgeId        String?
+  status         String    @default("FILED")
+  defense        String?
+  result         String?
+  ruling         String?
+  penalty        String?
+  decidedAt      DateTime?
+  appealDeadline DateTime?
+  appellantId    String?
+  appealReason   String?
+  appealJudgeId  String?
+  appealResult   String?
+  appealRuling   String?
+  appealPenalty  String?
+  finalizedAt    DateTime?
+  penaltyStatus  String?
+  penaltyNote    String?
+  threadId       String?
+  filedAt        DateTime  @default(now())
+  guild          Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  plaintiff      Citizen   @relation("plaintiff", fields: [plaintiffId], references: [id], onDelete: Cascade)
+  defendant      Citizen   @relation("defendant", fields: [defendantId], references: [id], onDelete: Cascade)
+  judge          Citizen?  @relation("judge", fields: [judgeId], references: [id], onDelete: SetNull)
+  appellant      Citizen?  @relation("appellant", fields: [appellantId], references: [id], onDelete: SetNull)
+  appealJudge    Citizen?  @relation("appealJudge", fields: [appealJudgeId], references: [id], onDelete: SetNull)
+
+  @@unique([guildId, number])
+  @@index([guildId, status])
+}
+
+model Petition {
+  id         String              @id @default(cuid())
   guildId    String
-  guild      Guild    @relation(fields: [guildId], references: [id])
-  proposerId String
-  proposer   Citizen  @relation("proposer", fields: [proposerId], references: [id])
+  number     Int
   title      String
   content    String
-  status     String   @default("DISCUSSION")
-  votingStart DateTime?
-  votingEnd   DateTime?
-  createdAt   DateTime @default(now())
+  creatorId  String
+  status     String              @default("OPEN")
+  expiresAt  DateTime
+  createdAt  DateTime            @default(now())
+  closedAt   DateTime?
+  guild      Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  creator    Citizen             @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  signatures PetitionSignature[]
+  bill       Bill?
 
-  votes ProposalVote[]
+  @@unique([guildId, number])
+  @@index([guildId, status])
 }
 
-model ProposalVote {
-  id         String   @id @default(cuid())
-  proposalId String
-  proposal   Proposal @relation(fields: [proposalId], references: [id])
+model PetitionSignature {
+  petitionId String
   citizenId  String
-  citizen    Citizen  @relation(fields: [citizenId], references: [id])
-  inFavor    Boolean
-  reason     String?
-  votedAt    DateTime @default(now())
+  signedAt   DateTime @default(now())
+  petition   Petition @relation(fields: [petitionId], references: [id], onDelete: Cascade)
+  citizen    Citizen  @relation(fields: [citizenId], references: [id], onDelete: Cascade)
 
-  @@unique([proposalId, citizenId])
+  @@id([petitionId, citizenId])
 }
 
-// FILED=提訴, IN_PROGRESS=審理中, VERDICT=判決, CLOSED=終結
-model Trial {
-  id          String   @id @default(cuid())
-  guildId     String
-  guild       Guild    @relation(fields: [guildId], references: [id])
-  plaintiffId String
-  plaintiff   Citizen  @relation("plaintiff", fields: [plaintiffId], references: [id])
-  defendantId String
-  defendant   Citizen  @relation("defendant", fields: [defendantId], references: [id])
-  judgeId     String?
-  judge       Citizen? @relation("judge", fields: [judgeId], references: [id])
-  title       String
-  description String
-  verdict     String?
-  status      String   @default("FILED")
-  filedAt     DateTime @default(now())
-  closedAt    DateTime?
+// 官報: the public record of every official act.
+model GazetteEntry {
+  id        String   @id @default(cuid())
+  guildId   String
+  number    Int
+  category  String
+  title     String
+  body      String
+  linkPath  String?
+  createdAt DateTime @default(now())
+  guild     Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, number])
+  @@index([guildId, createdAt])
+}
+
+model Session {
+  sid       String   @id
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

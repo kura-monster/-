@@ -1,0 +1,12 @@
+import "./setup";
+import "./tally.test";
+import "./citizen.test";
+import "./election.test";
+import "./parliament.test";
+import "./cabinet.test";
+import "./court.test";
+import "./petition.test";
+import "./scheduler.test";
+import "./commands.test";
+import "./web.test";
+import "./effects.test";

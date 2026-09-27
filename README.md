@@ -1,102 +1,177 @@
 # 🏛️ 民主主義Bot
 
-Discord鯖を「国」のように民主主義で運営するためのBotシステムです。
+Discord サーバーを「ひとつの国」として運営するための Bot です。
+**管理者派閥**と**国民代表派閥**が、選挙・国会・内閣・裁判所を通じてサーバーの運営方針を決めていきます。
+すべての公式行為は**官報**に記録され、Web ダッシュボードから誰でも（その国の市民なら）確認できます。
 
-## 概要
+- 三権分立（立法・行政・司法）と独立した選挙管理委員会
+- 15 の役職（元首・内閣総理大臣・議長・最高裁判所長官 など）と序列・兼任禁止ルール
+- 役職は Discord ロールとして自動で付与・剥奪
+- 選挙は Web で**秘密投票**、国会は**記名投票**
+- 管理者専用コマンドは `/admin` に分離（管理者以外には表示されません）
 
-管理者派閥と国民代表派閥の二大勢力が、サーバーの運営方針を議論・決定していきます。
+## 国のしくみ
 
-### 派閥構成
+### 派閥と役職（序列順）
 
-| 派閥 | 役職 | 説明 |
-|------|------|------|
-| 管理者派閥 | サーバーオーナー・管理者 | 既存のDiscord権限による運営 |
-| 国民代表派閥 | 国民代表（議員） | 選挙で選出。議決権＋一部Discord権限 |
-| 国民代表派閥 | 大臣 | 議員が任命。イベント担当、治安担当など |
-| 国民代表派閥 | 補佐官 | 議員が任命。サポート役 |
-| 国民代表派閥 | 裁判官 | 紛争解決・ルール違反判定 |
+| 序列 | 役職 | 派閥 | 部門 | 選ばれ方 | 主な権限 |
+|---:|---|---|---|---|---|
+| 1 | 👑 元首 | 管理者派閥 | — | 管理者が任命（初期設定でサーバーオーナー） | 管理者派閥の代表。他の役職と兼任しない |
+| 2 | 🎌 内閣総理大臣 | 国民代表派閥 | 行政 | 議員の中から首班指名選挙（過半数） | 閣僚・裁判官の任命、閣僚の罷免、総辞職、談話 |
+| 3 | 🔔 議長 | 国民代表派閥 | 立法 | 議員の互選（過半数） | 採決の開始、可否同数の決裁 |
+| 4 | ⚖️ 最高裁判所長官 | 独立機関 | 司法 | 管理者が任命 | 事件の配点、上告審の判決 |
+| 5 | 🛡️ 管理官 | 管理者派閥 | — | 管理者が任命 | 管理者派閥の称号 |
+| 6 | 🎙️ 副議長 | 国民代表派閥 | 立法 | 議員の互選 | 議長に代わり採決を開始 |
+| 7 | 🎖️ 副総理 | 国民代表派閥 | 行政 | 首相が任命 | 内閣のナンバー2 |
+| 8 | 📣 内閣官房長官 | 国民代表派閥 | 行政 | 首相が任命 | 政府の公式発表（談話） |
+| 9 | 💼 国務大臣 | 国民代表派閥 | 行政 | 首相が担当分野つきで任命（例: 外務大臣） | 政策の実行・法律の施行 |
+| 10 | 🗳️ 選挙管理委員長 | 独立機関 | 選挙 | 管理者が任命 | 選挙の告示・進行・中止（立候補不可） |
+| 11 | 🧑‍⚖️ 裁判官 | 独立機関 | 司法 | 首相が任命 | 審理・判決（罷免は国会の弾劾のみ） |
+| 12 | 🏛️ 国民代表（議員） | 国民代表派閥 | 立法 | 市民による選挙 | 法案の提出・採決、院内選挙、不信任・弾劾 |
+| 13 | 📋 選挙管理委員 | 独立機関 | 選挙 | 管理者が任命 | 選挙の告示・進行・中止（立候補不可） |
+| 14 | 📎 補佐官 | 国民代表派閥 | 立法 | 議員が任命（1人2名まで） | 議員の補佐（議員の失職で退任） |
+| — | 🪪 市民 | — | — | `/citizen register` | 投票・立候補・請願・提訴 |
 
-## 機能
+**兼任禁止（三権分立）**: 元首・裁判官・選挙管理委員は他の役職を兼任できません。議長・副議長は閣僚になれません。閣僚ポストは1人1つです。
+**派閥の分離**: Discord の管理者（管理者派閥）は、既定では議員・閣僚など国民代表派閥の役職に就けません（`/admin settings admin_participation:True` で許可）。
 
-### Discord Bot コマンド
+### 選挙
+1. 選挙管理委員会または管理者が告示（`/election manage start`）。総選挙は全議席、補欠選挙は欠員数が定数
+2. 市民が立候補（`/election candidacy`）。立候補者が定数以下なら**無投票当選**、0人なら不成立
+3. 立候補締切までに市民登録した市民（**選挙人名簿**）が Web で投票。誰が誰に投票したかは記録しない**秘密投票**
+4. 締切で自動開票。**法定得票数**（有効票÷定数×1/6）以上が必要、最下位が同数なら**くじ**
+5. 総選挙後は旧議会の議員が任期満了、**内閣は総辞職**、審議未了の議案は**廃案**。補欠選挙の当選者の任期は残任期間
+6. 任期満了が近づくと次の総選挙を自動で告示（設定で無効化可）
 
-| コマンド | 説明 |
-|----------|------|
-| `/citizen register` | 市民として登録 |
-| `/citizen info [@user]` | 市民情報を表示 |
-| `/election start` | 選挙を開始（管理者のみ） |
-| `/election register` | 立候補する |
-| `/election status` | 選挙状況を表示 |
-| `/election advance` | 選挙フェーズを進める（管理者のみ） |
-| `/election finalize` | 選挙を確定する（管理者のみ） |
-| `/propose submit` | 政策を提案する（議員のみ） |
-| `/propose list` | 提案一覧を表示 |
-| `/propose vote` | 提案に投票する（議員のみ） |
-| `/propose start_vote` | 提案の投票を開始（議員のみ） |
-| `/propose close` | 提案の投票を締切（議員のみ） |
-| `/appoint minister` | 大臣を任命（議員のみ） |
-| `/appoint aide` | 補佐官を任命（議員のみ） |
-| `/appoint judge` | 裁判官を任命 |
-| `/appoint dismiss` | 役職を解任 |
-| `/trial file` | 裁判を提訴 |
-| `/trial judge` | 裁判の担当に志願（裁判官のみ） |
-| `/trial verdict` | 判決を下す（担当裁判官のみ） |
-| `/trial list` | 進行中の裁判一覧 |
-| `/government show` | 政府構成を表示 |
-| `/government setup` | Bot設定（管理者のみ） |
+### 国会
+- 議員・閣僚が法案を提出 → 議長（不在時は議員）が採決を開始 → 議員が賛成/反対/棄権
+- 定足数は在籍議員の1/3、賛成が反対より多ければ可決（同数は議長の票で決裁）。全員が投票すると締切前でも集計
+- 可決された法律案は管理者派閥の**裁可**で成立。管理者は**拒否権**を行使でき、国会は**3分の2で再可決**できる。期限内に何もしなければ**自動成立**
+- **内閣不信任決議**（過半数で内閣総辞職）、**弾劾**（3分の2で全役職から罷免。元首・管理官は対象外）
+- 法案ごとに議論スレッドを自動作成し、管理者派閥と国民代表派閥がそこで議論できます
 
-### Web機能
+### 裁判所
+提訴 → 長官の配点（または裁判官が担当）→ 判決（原告勝訴なら警告・タイムアウトの制裁）→ 上告期間内なら上告 → 長官（不在・関係者なら原審以外の裁判官）が上告審 → 確定。
+確定した**タイムアウトは Bot が自動で執行**します（設定で無効化可。管理者には執行できません）。当事者は自分の事件を担当できません。
 
-- Discord OAuth2 ログイン
-- 選挙投票画面
-- 政府構成ダッシュボード
-- 政策提案一覧
-- 裁判記録
+### 請願・官報
+- 市民の請願が必要署名数に達すると、請願由来の法案として自動で国会へ送られます
+- 選挙・人事・立法・司法・管理者の操作など、すべての公式行為は官報に番号つきで記録され、告知チャンネルにも投稿されます
+
+## コマンド
+
+### みんなのコマンド
+役職が必要なサブコマンドは、使ったときに権限を確認します。`/help` で自分が使えるコマンドに ✅ が付きます。
+
+| コマンド | 内容 |
+|---|---|
+| `/help` | コマンド一覧 |
+| `/citizen register \| profile \| resign \| leave` | 市民登録・経歴・辞職・登録抹消 |
+| `/gov overview \| positions \| rules \| gazette` | 政府構成・役職一覧・国の制度・官報 |
+| `/election status \| candidacy \| withdraw \| vote \| results` | 選挙（投票はWebで） |
+| `/election manage start \| advance \| cancel` | 選挙管理（選挙管理委員会・管理者） |
+| `/parliament bill submit \| list \| info \| open \| vote \| withdraw \| override` | 法案 |
+| `/parliament elect \| no-confidence \| impeach \| members` | 院内選挙・不信任・弾劾・議員名簿 |
+| `/parliament aide appoint \| dismiss` | 補佐官（議員） |
+| `/cabinet appoint \| dismiss \| list \| resign \| statement \| implement` | 内閣（首相・閣僚） |
+| `/court file \| respond \| assign \| take \| verdict \| appeal \| final-ruling \| withdraw \| list \| info` | 裁判 |
+| `/petition create \| sign \| list \| info` | 請願 |
+
+### 管理者専用コマンド `/admin`
+Discord の「管理者」権限を持つメンバーにだけ表示されます（実行時にも再確認）。すべての操作は官報に記録されます。
+
+| コマンド | 内容 |
+|---|---|
+| `/admin setup` | チャンネル設定・役職ロール作成・元首の任命・ロール同期・診断 |
+| `/admin sync` | 役職ロールの再作成と全メンバーの同期 |
+| `/admin diagnose` | Bot の権限・ロール順位・チャンネル設定の診断 |
+| `/admin settings` | 議員定数・任期・各期間・請願の署名数などの制度変更 |
+| `/admin appoint` | 元首・管理官・最高裁判所長官・選挙管理委員長・委員の任命 |
+| `/admin dismiss` | 任意の役職からの罷免（理由つきで官報に記録） |
+| `/admin bill sanction \| veto` | 可決法案の裁可・拒否権 |
+| `/admin dissolve` | 議会の解散と総選挙の告示 |
+| `/admin citizen revoke \| restore` | 市民権の停止・回復（サブアカウント対策） |
+
+## Web ダッシュボード
+
+Discord でログインすると、市民登録している国の **政府・選挙・国会・裁判所・請願・官報** を見られます。選挙の投票と請願への署名は Web から行います。
+
+- ログインは Discord OAuth2（`identify` スコープのみ、state 検証つき）
+- その国の市民だけがその国のデータを閲覧可能
+- 投票・署名は同一オリジン検証、SameSite Cookie、CSP、テキストのみの描画（XSS対策）
+- スマートフォン・ダークモード対応
 
 ## セットアップ
 
-### 1. Discord Bot の作成
+### 1. Discord Developer Portal
+1. [Developer Portal](https://discord.com/developers/applications) でアプリケーションを作成
+2. **Bot** ページでトークンを発行し、**SERVER MEMBERS INTENT** を有効化（必須）
+3. **OAuth2** ページで Client Secret を取得し、Redirects に `WEB_BASE_URL/auth/callback`（例: `http://localhost:3000/auth/callback`）を追加
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) でアプリケーションを作成
-2. Bot を追加し、トークンを取得
-3. OAuth2 > Redirects に `http://localhost:3000/auth/callback` を追加
-4. Bot の Privileged Gateway Intents で `Server Members Intent` を有効化
-
-### 2. 環境変数の設定
-
+### 2. 環境変数
 ```bash
 cp .env.example .env
 ```
+`.env` に `DISCORD_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `SESSION_SECRET` / `WEB_BASE_URL` を設定します。
 
-`.env` を編集:
-
-```
-DISCORD_TOKEN=your_bot_token
-DISCORD_CLIENT_ID=your_client_id
-DISCORD_CLIENT_SECRET=your_client_secret
-WEB_PORT=3000
-WEB_BASE_URL=http://localhost:3000
-SESSION_SECRET=random_secret_string
-DATABASE_URL=file:./dev.db
-```
-
-### 3. インストール・起動
-
+### 3. インストールと起動
 ```bash
 npm install
-npx prisma generate
-npx prisma db push
-
-# スラッシュコマンドを登録
-npm run deploy-commands
-
-# Bot + Web サーバーを起動
-npm run dev
+npm run db:push          # データベースを作成
+npm run deploy-commands  # スラッシュコマンドを登録（コマンド構成を変えたときも実行）
+npm run dev              # Bot + Web + スケジューラを起動
 ```
+起動ログに**招待URL**（必要な権限つき）が表示されます。Bot をサーバーに招待したら、管理者が次を実行します。
+
+```
+/admin setup announce_channel:#官報 debate_channel:#議事堂 court_channel:#裁判所 election_channel:#選挙
+```
+
+役職ロールが作成され、サーバーオーナーが元首に任命されます。あとは市民が `/citizen register` で登録し、`/election manage start kind:総選挙` で最初の選挙を告示すれば国が動き始めます。
+
+> **Bot のロール順位**: Bot は自分より下のロールしか付与できません。サーバー設定で Bot のロールを役職ロールより上に置いてください（`/admin diagnose` で確認できます）。
+
+### 役職ロールの既定の権限
+作成時に以下の権限を付与します（作成後は管理者が自由に変更でき、Bot は上書きしません）。
+
+| ロール | 既定の権限 |
+|---|---|
+| 内閣総理大臣 | @everyone へのメンション、イベント管理、優先スピーカー |
+| 議長 | スレッド管理、イベント管理、優先スピーカー |
+| 国民代表（議員）・副総理・内閣官房長官 | イベント管理、優先スピーカー |
+| 国務大臣 | イベント管理 |
+| 副議長・最高裁判所長官・裁判官 | スレッド管理 |
+| その他・市民 | なし |
+
+### 本番運用
+- `npm run build && npm start` で起動（`NODE_ENV=production` では `SESSION_SECRET` が必須）
+- HTTPS のリバースプロキシの後ろで動かす場合は `TRUST_PROXY=true`
+
+### v1 からの更新
+データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除してから `npm run db:push` を実行し、`npm run deploy-commands` でコマンドを登録し直してください（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。
+
+## 開発
+
+```bash
+npm test           # 一時的なSQLiteでテスト（開発用DBには触れません）
+npm run typecheck  # 型チェック（src と test）
+```
+
+テストは選挙・国会・内閣・裁判・請願・スケジューラのロジック、コマンド定義が Discord の制約を満たすこと、実際のコマンドハンドラーの通し操作、Web API のセキュリティ、Discord への反映（偽クライアント）を検証します。
 
 ## 技術構成
 
-- **Bot**: discord.js + TypeScript
-- **Web**: Express
-- **DB**: SQLite (Prisma ORM)
+- **Bot**: discord.js v14 + TypeScript
+- **Web**: Express 5 + 依存なしのフロントエンド（`public/`）
+- **DB**: SQLite（Prisma ORM）
 - **認証**: Discord OAuth2
+
+```
+src/
+├── core/       役職カタログ・定数・集計ロジック・イベント
+├── services/   国のルール（選挙・国会・内閣・裁判・請願・官報・スケジューラ）
+├── bot/        スラッシュコマンド・Discordロール同期・Discordへの反映
+└── web/        Webサーバー・認証・API
+public/         Webダッシュボード
+test/           テスト
+```

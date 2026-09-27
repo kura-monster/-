@@ -1,29 +1,25 @@
 import { REST, Routes } from "discord.js";
-import { commands } from "./commands";
-import "dotenv/config";
+import { config } from "../config";
+import { ADMIN_COMMANDS, COMMANDS, PUBLIC_COMMANDS } from "./commands";
 
-const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.DISCORD_CLIENT_ID;
-
-if (!token || !clientId) {
-  console.error("DISCORD_TOKEN と DISCORD_CLIENT_ID を .env に設定してください。");
-  process.exit(1);
-}
-
-const rest = new REST({ version: "10" }).setToken(token);
-
-async function main() {
-  try {
-    console.log(`${commands.length}個のコマンドを登録中...`);
-
-    await rest.put(Routes.applicationCommands(clientId!), {
-      body: commands.map((c) => c.data.toJSON()),
-    });
-
-    console.log("コマンド登録完了！");
-  } catch (error) {
-    console.error("コマンド登録エラー:", error);
+async function main(): Promise<void> {
+  if (!config.discordToken || !config.clientId) {
+    console.error("DISCORD_TOKEN と DISCORD_CLIENT_ID を .env に設定してください。");
+    process.exit(1);
   }
+  const rest = new REST({ version: "10" }).setToken(config.discordToken);
+  const body = COMMANDS.map((command) => command.data.toJSON());
+  const route = config.devGuildId
+    ? Routes.applicationGuildCommands(config.clientId, config.devGuildId)
+    : Routes.applicationCommands(config.clientId);
+
+  await rest.put(route, { body });
+  console.log(`✅ ${config.devGuildId ? `サーバー ${config.devGuildId}` : "全サーバー"}にコマンドを登録しました。`);
+  console.log(`   みんなのコマンド: ${PUBLIC_COMMANDS.map((c) => `/${c.data.name}`).join(" ")}`);
+  console.log(`   管理者専用コマンド: ${ADMIN_COMMANDS.map((c) => `/${c.data.name}`).join(" ")}（管理者にのみ表示）`);
 }
 
-main();
+main().catch((error) => {
+  console.error("コマンド登録エラー:", error);
+  process.exit(1);
+});
