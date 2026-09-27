@@ -118,9 +118,9 @@ cp .env.example .env
 ### 3. インストールと起動
 ```bash
 npm install
-npm run deploy-commands  # スラッシュコマンドを登録（コマンド構成を変えたときも実行）
 npm run dev              # Bot + Web + スケジューラを起動
 ```
+スラッシュコマンドは Bot が自動で登録します（起動時・サーバーに参加したとき・3時間ごと）。サーバーごとに登録するので、招待した直後から使えます。以前に全体向け（グローバル）で登録したコマンドは、二重に表示されないよう起動時に削除します。Bot を起動せずに登録だけしたい場合は `npm run deploy-commands` を使います。
 データベース（既定は `prisma/dev.db`）は起動時に自動で作成し、構造が変わったときも自動で更新します。データが消える変更だけは自動で行わず、案内を表示して停止します。
 起動ログに**招待URL**（必要な権限つき）が表示されます。Bot をサーバーに招待したら、管理者が次を実行します。
 
@@ -145,7 +145,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 | その他・{`市民`} | なし |
 
 ### 本番運用（ホスティング・Cloudflare）
-- 起動方法: Node.js なら `npm run build && npm start`、Bun なら `bun install` → `bun src/index.ts`（コマンド登録は `bun src/bot/deploy-commands.ts`）
+- 起動方法: Node.js なら `npm run build && npm start`、Bun なら `bun install` → `bun src/index.ts`
 - `WEB_BASE_URL` には公開URL（`https://democracy.example.com`）を設定します。`https://` を省略した場合は補います
 - **ポート**: ホスティングが渡す `PORT` / `SERVER_PORT` を自動で使います。ドメインの転送先が別のポートなら `WEB_PORT` で指定します。起動ログの「ポート ○○ で待ち受け中・（読み取った変数）」で確認できます
 - `WEB_BASE_URL` が `https://` なら、プロキシの `X-Forwarded-Proto` を信頼する設定（`TRUST_PROXY`）が自動で有効になり、ログインCookieに Secure 属性が付きます（プロキシが HTTPS を伝えない場合もログインはでき、ログに `[注意]` が出ます）
@@ -163,7 +163,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 | 起動ログに `[エラー] データベースの構造が最新ではありません` | データが消える変更が必要。データベースファイルをバックアップしてから `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
 
 ### v1 からの更新
-データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除（またはバックアップ）してから起動すると新しいデータベースが作られます。`npm run deploy-commands` でコマンドを登録し直してください（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。
+データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除（またはバックアップ）してから起動すると新しいデータベースが作られます。コマンドは起動時に自動で登録し直されます（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。
 
 ## 開発
 

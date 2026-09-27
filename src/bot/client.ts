@@ -4,6 +4,7 @@ import { removeCitizenship, touchCitizen } from "../services/citizen";
 import { ensureGuild } from "../services/guild";
 import { COMMANDS } from "./commands";
 import type { BotCommand } from "./commands/types";
+import { keepCommandsRegistered } from "./command-sync";
 import { identityOf } from "./context";
 import { inviteUrl } from "./permissions";
 import { replyError } from "./ui";
@@ -58,6 +59,7 @@ export function createBot(onReady?: (client: Client<true>) => void): Client {
     for (const guild of ready.guilds.cache.values()) {
       ensureGuild(guild.id, guild.name).catch((error) => console.error("[guild]", error));
     }
+    keepCommandsRegistered(ready);
     onReady?.(ready);
   });
   client.on(Events.GuildCreate, (guild) => {
