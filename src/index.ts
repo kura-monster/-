@@ -1,7 +1,8 @@
+import fs from "node:fs";
 import { config } from "./config";
 import { createBot } from "./bot/client";
 import { attachDiscordEffects } from "./bot/effects";
-import { findSchemaProblem } from "./lib/prisma";
+import { databaseFile, findSchemaProblem, pushSchema } from "./lib/prisma";
 import { startScheduler } from "./services/scheduler";
 import { createWebApp } from "./web/server";
 
@@ -21,13 +22,28 @@ function explainListenError(error: unknown): void {
   }
 }
 
-async function main(): Promise<void> {
-  const schemaProblem = await findSchemaProblem();
-  if (schemaProblem) {
-    console.error(`[エラー] データベースが作成されていないか、古い構造のままです（${schemaProblem}）。`);
-    console.error("[エラー] Bot を止めて `bunx prisma db push`（Node.js なら `npx prisma db push`）を実行してから、もう一度起動してください。");
-    process.exit(1);
+/** Creates the database on first start and applies schema changes that keep the data. */
+async function prepareDatabase(): Promise<boolean> {
+  const file = databaseFile();
+  const isNew = file !== null && !fs.existsSync(file);
+  const push = pushSchema();
+  if (!push.ok) {
+    console.warn(`[注意] データベースの構造を自動で更新できませんでした。\n${push.output.split("\n").slice(-15).join("\n")}`);
   }
+  const problem = await findSchemaProblem();
+  if (problem) {
+    console.error(`[エラー] データベースの構造が最新ではありません（${problem}）。`);
+    console.error(
+      `[エラー] データが消える変更は自動で行いません。上のメッセージを確認し、データベース（${file ?? "DATABASE_URL の接続先"}）をバックアップしてから \`bunx prisma db push\`（Node.js なら \`npx prisma db push\`）を実行してください。`,
+    );
+    return false;
+  }
+  console.log(`[民主主義Bot] データベース: ${file ?? "SQLite 以外（DATABASE_URL）"}${isNew && push.ok ? "（新しく作成しました）" : ""}`);
+  return true;
+}
+
+async function main(): Promise<void> {
+  if (!(await prepareDatabase())) process.exit(1);
 
   try {
     await startWeb();

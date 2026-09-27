@@ -7,7 +7,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { config, normalizeBaseUrl, resolvePort } from "../src/config";
-import { findSchemaProblem } from "../src/lib/prisma";
+import { databaseFile, findSchemaProblem, pushSchema } from "../src/lib/prisma";
 import { createWebApp } from "../src/web/server";
 
 describe("公開環境での起動", () => {
@@ -58,6 +58,34 @@ describe("公開環境での起動", () => {
       console.warn = warn;
       Object.assign(config, saved);
       await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it("データベースは起動時に自動で作成・更新し、データが消える変更は行わない", async () => {
+    const file = path.join(os.tmpdir(), `democracy-bot-push-${process.pid}-${Date.now()}.db`);
+    const url = `file:${file}`;
+    assert.equal(databaseFile(url), file);
+    assert.equal(databaseFile("file:./dev.db?connection_limit=1"), path.resolve(__dirname, "../prisma/dev.db"));
+    assert.equal(databaseFile("postgresql://db.example/democracy"), null);
+
+    const created = pushSchema(url);
+    assert.ok(created.ok, created.output);
+    const client = new PrismaClient({ datasourceUrl: url });
+    try {
+      assert.equal(await findSchemaProblem(client), null);
+      assert.ok(pushSchema(url).ok, "an up-to-date database is left as is");
+
+      // A column the schema no longer has, still holding data: pushing would drop it, so it must be refused.
+      await client.guild.create({ data: { id: "old", name: "旧国" } });
+      await client.$executeRawUnsafe(`ALTER TABLE "Guild" ADD COLUMN "legacy" TEXT`);
+      await client.$executeRawUnsafe(`UPDATE "Guild" SET "legacy" = 'kept'`);
+      const refused = pushSchema(url);
+      assert.equal(refused.ok, false);
+      assert.match(refused.output, /data loss/i);
+      assert.deepEqual(await client.$queryRawUnsafe(`SELECT "legacy" FROM "Guild"`), [{ legacy: "kept" }]);
+    } finally {
+      await client.$disconnect();
+      for (const f of [file, `${file}-journal`]) fs.rmSync(f, { force: true });
     }
   });
 

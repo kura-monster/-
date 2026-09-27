@@ -113,14 +113,15 @@ Discord でログインすると、市民登録している国の **政府・選
 cp .env.example .env
 ```
 `.env` に `DISCORD_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `SESSION_SECRET` / `WEB_BASE_URL` を設定します。
+`.env` は GitHub に含めないため、GitHub から取り込むホスティングでは、管理画面の環境変数に同じ内容を設定してください。
 
 ### 3. インストールと起動
 ```bash
 npm install
-npm run db:push          # データベースを作成
 npm run deploy-commands  # スラッシュコマンドを登録（コマンド構成を変えたときも実行）
 npm run dev              # Bot + Web + スケジューラを起動
 ```
+データベース（既定は `prisma/dev.db`）は起動時に自動で作成し、構造が変わったときも自動で更新します。データが消える変更だけは自動で行わず、案内を表示して停止します。
 起動ログに**招待URL**（必要な権限つき）が表示されます。Bot をサーバーに招待したら、管理者が次を実行します。
 
 ```
@@ -144,22 +145,23 @@ npm run dev              # Bot + Web + スケジューラを起動
 | その他・{`市民`} | なし |
 
 ### 本番運用（ホスティング・Cloudflare）
-- 起動方法: Node.js なら `npm run build && npm start`、Bun なら `bun install` → `bunx prisma db push` → `bun src/index.ts`（コマンド登録は `bun src/bot/deploy-commands.ts`）
+- 起動方法: Node.js なら `npm run build && npm start`、Bun なら `bun install` → `bun src/index.ts`（コマンド登録は `bun src/bot/deploy-commands.ts`）
 - `WEB_BASE_URL` には公開URL（`https://democracy.example.com`）を設定します。`https://` を省略した場合は補います
 - **ポート**: ホスティングが渡す `PORT` / `SERVER_PORT` を自動で使います。ドメインの転送先が別のポートなら `WEB_PORT` で指定します。起動ログの「ポート ○○ で待ち受け中・（読み取った変数）」で確認できます
 - `WEB_BASE_URL` が `https://` なら、プロキシの `X-Forwarded-Proto` を信頼する設定（`TRUST_PROXY`）が自動で有効になり、ログインCookieに Secure 属性が付きます（プロキシが HTTPS を伝えない場合もログインはでき、ログに `[注意]` が出ます）
 - `NODE_ENV=production` では `SESSION_SECRET` が必須です
-- 起動時にデータベースを確認し、未作成・古い構造なら `prisma db push` を案内して停止します
+- GitHub から取り込み直したあとに起動ログへ「データベース: …（新しく作成しました）」と出た場合は、取り込みでデータベースファイルが消えています。`DATABASE_URL` を取り込み先の外のファイル（例: `file:/絶対パス/democracy.db`）にしてください
 
 | 症状 | 確認すること |
 |---|---|
 | Cloudflare の **502 Bad gateway** | 起動ログのポートが、ドメイン（ホスティングの転送設定や Cloudflare Tunnel）の転送先ポートと同じか。`[エラー] ポート ○○ は別のプログラムが使用中` が出ていないか |
 | Discord の画面に「Invalid OAuth2 redirect_uri」 | Developer Portal の OAuth2 → Redirects に `WEB_BASE_URL/auth/callback` を完全一致で登録したか |
 | 「ログインの検証に失敗しました」 | サイトを `WEB_BASE_URL` と同じドメインで開いているか（IPアドレスや別のドメインで開くとCookieが届きません） |
-| 起動ログに `[エラー] データベースが作成されていないか…` | Bot を止めて `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
+| 起動ログに `DISCORD_TOKEN が未設定` や `http://localhost:3000` | 設定が読み込まれていない。GitHub から取り込むと `.env` は消えるので、管理画面の環境変数に設定する |
+| 起動ログに `[エラー] データベースの構造が最新ではありません` | データが消える変更が必要。データベースファイルをバックアップしてから `bunx prisma db push`（Node.js は `npx prisma db push`）を実行 |
 
 ### v1 からの更新
-データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除してから `npm run db:push` を実行し、`npm run deploy-commands` でコマンドを登録し直してください（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。
+データベースの構造が変わったため、v1 のデータは引き継げません。`prisma/dev.db` を削除（またはバックアップ）してから起動すると新しいデータベースが作られます。`npm run deploy-commands` でコマンドを登録し直してください（旧 `/propose` `/appoint` `/trial` などは消え、新しいコマンドに置き換わります）。
 
 ## 開発
 
