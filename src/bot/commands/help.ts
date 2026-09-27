@@ -68,7 +68,7 @@ const SECTIONS: Section[] = [
       "`/admin sync` ロール同期　`/admin diagnose` 診断　`/admin settings` 制度の変更",
       "`/admin appoint | dismiss` 元首・管理官・最高裁判所長官・選挙管理委員の任命／罷免",
       "`/admin bill sanction | veto` 可決法案の裁可・拒否権",
-      "`/admin dissolve` 議会の解散　`/admin citizen revoke | restore` 市民権の停止／回復",
+      "`/admin dissolve` 議会の解散　`/admin citizen register` ロールを持つ全員を市民登録　`/admin citizen revoke | restore` 市民権の停止／回復",
     ],
   },
 ];

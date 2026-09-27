@@ -15,6 +15,7 @@ import {
   adminAppoint,
   adminDismiss,
   dissolveParliament,
+  registerRoleMembers,
   revokeCitizenship,
   sanctionBill,
   vetoBill,
@@ -23,7 +24,7 @@ import {
 import { restoreCitizenship } from "../../services/citizen";
 import { startElection } from "../../services/election";
 import { formatSetting, getGuild, settingField, updateChannels, updateSettings, type SettingKey, type SettingsInput } from "../../services/guild";
-import { actorFrom, targetOf } from "../context";
+import { actorFrom, identityOf, targetOf } from "../context";
 import { diagnose } from "../diagnostics";
 import { ensureManagedRoles, syncAllMembers } from "../roles";
 import {
@@ -169,7 +170,16 @@ export const adminCommand: BotCommand = {
     .addSubcommandGroup((g) =>
       g
         .setName("citizen")
-        .setDescription("市民権の管理（サブアカウント・荒らし対策）")
+        .setDescription("市民の一括登録と、市民権の管理（サブアカウント・荒らし対策）")
+        .addSubcommand((s) =>
+          s
+            .setName("register")
+            .setDescription("指定したロールを持つメンバー全員を市民登録する（Bot を除く）")
+            .addRoleOption((o) => o.setName("role").setDescription("このロールを持つ全員を登録（@everyone なら全メンバー）").setRequired(true))
+            .addBooleanOption((o) =>
+              o.setName("ignore_requirements").setDescription("アカウント年齢・在籍期間の条件を無視する（省略すると条件を守る）"),
+            ),
+        )
         .addSubcommand((s) =>
           s
             .setName("revoke")
@@ -308,7 +318,7 @@ export const adminCommand: BotCommand = {
           field(
             "次のステップ",
             [
-              "1. 市民に `/citizen register` で登録してもらう（参加方法は官報の案内に掲載）",
+              "1. 市民に `/citizen register` で登録してもらう（参加方法は官報の案内に掲載）。`/admin citizen register` でロールごとにまとめて登録も可",
               ...(election ? [] : ["2. `/election manage start kind:総選挙` で最初の選挙を告示"]),
               "・必要に応じて `/admin appoint` で最高裁判所長官・選挙管理委員長を任命",
               "・`/admin settings` で議員定数や任期を調整",
@@ -409,6 +419,37 @@ export const adminCommand: BotCommand = {
             field("投票の締切", withRelative(election.votingEndsAt)),
           ),
         );
+        return;
+      }
+
+      case "citizen register": {
+        await interaction.deferReply();
+        const role = interaction.options.getRole("role", true);
+        const waive = interaction.options.getBoolean("ignore_requirements") ?? false;
+        const members = await interaction.guild.members
+          .fetch()
+          .catch(() => fail("メンバー一覧を取得できませんでした。Developer Portal の Bot 設定で「SERVER MEMBERS INTENT」を有効にしてください。"));
+        const holders = [...members.values()].filter((member) => !member.user.bot && member.roles.cache.has(role.id));
+        const result = await registerRoleMembers(
+          actor,
+          role.name,
+          holders.map((member) => ({ ...identityOf(member.user, member), accountCreatedAt: member.user.createdAt, joinedAt: member.joinedAt })),
+          { waiveRequirements: waive },
+        );
+        const body = embed(COLOR.admin, "市民の一括登録")
+          .setDescription(`${role} を持つメンバー ${holders.length}名（Bot を除く）`)
+          .addFields(
+            field(
+              `登録した市民（${result.registered.length}名）`,
+              limitLines(result.registered.map((c) => `${mention(c.discordId)}　市民番号 ${c.number}`)),
+            ),
+            field("登録済み", `${result.alreadyRegistered}名`, true),
+            field(`登録できなかった人（${result.skipped.length}名）`, limitLines(result.skipped.map((s) => `${s.displayName}: ${s.reason}`))),
+          );
+        if (!waive && result.skipped.some((s) => s.waivable)) {
+          body.setFooter({ text: "アカウント年齢・在籍期間の条件を無視して登録するには ignore_requirements:True を指定してください" });
+        }
+        await replyEmbed(interaction, body);
         return;
       }
 

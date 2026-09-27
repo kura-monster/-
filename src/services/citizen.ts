@@ -1,4 +1,4 @@
-import type { Citizen } from "@prisma/client";
+import type { Citizen, Guild } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { nextNumber, transact, type Db, type Tx } from "../core/db";
 import { fail } from "../core/errors";
@@ -32,32 +32,57 @@ export interface RegistrationInput extends Identity {
   joinedAt: Date | null;
 }
 
+export type RegistrationProblem =
+  | { code: "REVOKED"; reason: string | null }
+  | { code: "REGISTERED"; number: number }
+  | { code: "ACCOUNT_AGE"; days: number }
+  | { code: "MEMBERSHIP"; days: number };
+
+/**
+ * Why this person may not register. The account-age and membership requirements (against sub-accounts) can be
+ * waived by an admin; a revocation cannot.
+ */
+export function registrationProblem(
+  guild: Guild,
+  existing: Citizen | null,
+  input: RegistrationInput,
+  now: Date,
+  waiveRequirements = false,
+): RegistrationProblem | null {
+  if (existing?.revokedAt) return { code: "REVOKED", reason: existing.revokedReason };
+  if (existing?.active) return { code: "REGISTERED", number: existing.number };
+  if (waiveRequirements) return null;
+  const accountAgeDays = (now.getTime() - input.accountCreatedAt.getTime()) / DAY;
+  if (accountAgeDays < guild.minAccountAgeDays) return { code: "ACCOUNT_AGE", days: guild.minAccountAgeDays };
+  if (guild.minMembershipDays > 0) {
+    const memberDays = input.joinedAt ? (now.getTime() - input.joinedAt.getTime()) / DAY : 0;
+    if (memberDays < guild.minMembershipDays) return { code: "MEMBERSHIP", days: guild.minMembershipDays };
+  }
+  return null;
+}
+
 export async function registerCitizen(guildId: string, input: RegistrationInput, now: Date = new Date()) {
   return transact(async (tx, events) => {
     const guild = await getGuild(tx, guildId);
     const existing = await findCitizen(tx, guildId, input.discordId);
-    if (existing?.revokedAt) {
-      fail(`市民権が停止されています（理由: ${existing.revokedReason ?? "記載なし"}）。管理者にお問い合わせください。`);
+    const problem = registrationProblem(guild, existing, input, now);
+    switch (problem?.code) {
+      case "REVOKED":
+        fail(`市民権が停止されています（理由: ${problem.reason ?? "記載なし"}）。管理者にお問い合わせください。`);
+      case "REGISTERED":
+        fail(`すでに市民番号 ${problem.number} として登録済みです。`);
+      case "ACCOUNT_AGE":
+        fail(`市民登録には Discord アカウントの作成から ${problem.days} 日以上が必要です。`);
+      case "MEMBERSHIP":
+        fail(`市民登録にはサーバーへの参加から ${problem.days} 日以上が必要です。`);
     }
-    if (existing?.active) fail(`すでに市民番号 ${existing.number} として登録済みです。`);
-
-    const accountAgeDays = (now.getTime() - input.accountCreatedAt.getTime()) / DAY;
-    if (accountAgeDays < guild.minAccountAgeDays) {
-      fail(`市民登録には Discord アカウントの作成から ${guild.minAccountAgeDays} 日以上が必要です。`);
-    }
-    if (guild.minMembershipDays > 0) {
-      const memberDays = input.joinedAt ? (now.getTime() - input.joinedAt.getTime()) / DAY : 0;
-      if (memberDays < guild.minMembershipDays) {
-        fail(`市民登録にはサーバーへの参加から ${guild.minMembershipDays} 日以上が必要です。`);
-      }
-    }
-
-    const citizen = await activate(tx, events, guildId, input, existing, now);
+    const citizen = await activateCitizen(tx, events, guildId, input, existing, now);
     return { citizen, reactivated: existing !== null };
   });
 }
 
-async function activate(tx: Tx, events: DomainEvent[], guildId: string, identity: Identity, existing: Citizen | null, now: Date) {
+/** Creates the citizen record, or reactivates one that left, and gives them the {市民} role. */
+export async function activateCitizen(tx: Tx, events: DomainEvent[], guildId: string, identity: Identity, existing: Citizen | null, now: Date) {
   const citizen = existing
     ? await tx.citizen.update({
         where: { id: existing.id },
@@ -82,7 +107,7 @@ export async function ensureCitizen(tx: Tx, events: DomainEvent[], guildId: stri
   const existing = await findCitizen(tx, guildId, identity.discordId);
   if (existing?.revokedAt) fail(`${existing.displayName} さんは市民権が停止されています。`);
   if (existing?.active) return existing;
-  return activate(tx, events, guildId, identity, existing, now);
+  return activateCitizen(tx, events, guildId, identity, existing, now);
 }
 
 export async function touchCitizen(guildId: string, identity: Identity): Promise<void> {

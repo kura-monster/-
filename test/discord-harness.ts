@@ -48,7 +48,8 @@ function fakeMember(person: FakePerson) {
   };
 }
 
-type Value = string | number | boolean | FakePerson;
+/** A role option takes the role itself (for example one from a fake guild). */
+type Value = string | number | boolean | FakePerson | { id: string; name: string };
 
 function optionDefinitions(commandName: string, route: string): { defs: APIApplicationCommandOption[]; wrap: (o: unknown[]) => unknown[] } {
   const command = COMMANDS.find((c) => c.data.name === commandName);
@@ -85,6 +86,9 @@ function buildOptions(commandName: string, route: string, values: Record<string,
     if (def.type === ApplicationCommandOptionType.User) {
       const person = value as FakePerson;
       options.push({ name, type: def.type, value: discordIdOf(person.name), user: fakeUser(person), member: fakeMember(person) });
+    } else if (def.type === ApplicationCommandOptionType.Role) {
+      const role = value as { id: string };
+      options.push({ name, type: def.type, value: role.id, role });
     } else {
       options.push({ name, type: def.type, value, ...(name === focused ? { focused: true } : {}) });
     }

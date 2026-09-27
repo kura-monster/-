@@ -15,3 +15,4 @@ import "./connection.test";
 import "./command-sync.test";
 import "./autosetup.test";
 import "./office-election.test";
+import "./bulk-register.test";

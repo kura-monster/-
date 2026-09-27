@@ -1,11 +1,22 @@
+import type { Citizen } from "@prisma/client";
 import { transact } from "../core/db";
 import { roleTag } from "../core/text";
 import { fail } from "../core/errors";
 import type { GazetteCategory } from "../core/constants";
 import { POSITIONS, type PositionKey } from "../core/positions";
-import { ensureCitizen, findCitizen, removeCitizenship, requireTargetCitizen } from "./citizen";
+import {
+  activateCitizen,
+  ensureCitizen,
+  findCitizen,
+  registrationProblem,
+  removeCitizenship,
+  requireTargetCitizen,
+  type RegistrationInput,
+  type RegistrationProblem,
+} from "./citizen";
 import { createElection } from "./election";
 import { publish } from "./gazette";
+import { getGuild } from "./guild";
 import { findBill, lapsePendingBills } from "./parliament";
 import { appoint, describeEnded, endPosition, holderOf } from "./positions";
 import type { Actor, Identity } from "./types";
@@ -21,6 +32,69 @@ export type AdminAppointable = (typeof ADMIN_APPOINTABLE)[number];
 
 function assertAdmin(actor: Actor): void {
   if (!actor.isAdmin) fail("この操作は管理者専用です。");
+}
+
+export interface BulkRegistration {
+  registered: Citizen[];
+  alreadyRegistered: number;
+  skipped: { displayName: string; reason: string; waivable: boolean }[];
+}
+
+function skipReason(problem: Exclude<RegistrationProblem, { code: "REGISTERED" }>): string {
+  switch (problem.code) {
+    case "REVOKED":
+      return "市民権停止中";
+    case "ACCOUNT_AGE":
+      return `アカウント作成から${problem.days}日未満`;
+    case "MEMBERSHIP":
+      return `サーバー参加から${problem.days}日未満`;
+  }
+}
+
+/**
+ * Registers everyone holding a Discord role (the caller passes the members). The usual requirements apply unless
+ * waived, revoked citizens stay revoked, and the gazette gets one entry instead of one per person.
+ */
+export async function registerRoleMembers(
+  actor: Actor,
+  roleName: string,
+  members: RegistrationInput[],
+  options: { waiveRequirements?: boolean } = {},
+  now: Date = new Date(),
+): Promise<BulkRegistration> {
+  assertAdmin(actor);
+  return transact(async (tx, events) => {
+    const guild = await getGuild(tx, actor.guildId);
+    const result: BulkRegistration = { registered: [], alreadyRegistered: 0, skipped: [] };
+    for (const member of members) {
+      const existing = await findCitizen(tx, actor.guildId, member.discordId);
+      const problem = registrationProblem(guild, existing, member, now, options.waiveRequirements);
+      if (problem?.code === "REGISTERED") {
+        result.alreadyRegistered++;
+      } else if (problem) {
+        result.skipped.push({ displayName: member.displayName, reason: skipReason(problem), waivable: problem.code !== "REVOKED" });
+      } else {
+        result.registered.push(await activateCitizen(tx, events, actor.guildId, member, existing, now));
+      }
+    }
+    if (result.registered.length > 0) {
+      const LISTED = 50;
+      const names = result.registered.slice(0, LISTED).map((c) => `市民番号 ${c.number}　${c.displayName}`);
+      const rest = result.registered.length - names.length;
+      await publish(tx, events, actor.guildId, {
+        category: "ADMIN",
+        title: `市民の一括登録（${result.registered.length}名）`,
+        body: [
+          `管理者 ${actor.displayName} が、ロール「${roleName}」を持つメンバーを市民登録しました${options.waiveRequirements ? "（アカウント年齢・在籍期間の条件を適用せず）" : ""}。`,
+          ...names,
+          rest > 0 ? `ほか${rest}名` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+    }
+    return result;
+  });
 }
 
 const APPOINTMENT_CATEGORY: Record<AdminAppointable, GazetteCategory> = {

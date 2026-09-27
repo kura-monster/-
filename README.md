@@ -103,6 +103,7 @@ Discord の「管理者」権限を持つメンバーにだけ表示されます
 | `/admin dismiss` | 任意の役職からの罷免（理由つきで官報に記録） |
 | `/admin bill sanction \| veto` | 可決法案の裁可・拒否権 |
 | `/admin dissolve` | 議会の解散と総選挙の告示 |
+| `/admin citizen register` | 指定したロールを持つメンバー全員を市民登録（Bot を除く。`@everyone` なら全員。`ignore_requirements:True` でアカウント年齢・在籍期間の条件を無視。市民権停止中の人は登録しません） |
 | `/admin citizen revoke \| restore` | 市民権の停止・回復（サブアカウント対策） |
 
 ## Web ダッシュボード
@@ -162,7 +163,7 @@ npm run dev              # Bot + Web + スケジューラを起動
 /admin setup announce_channel:#官報 debate_channel:#議事堂 court_channel:#裁判所 election_channel:#選挙
 ```
 
-あとは市民が `/citizen register` で登録し、`/election manage start kind:総選挙` で最初の選挙を告示すれば国が動き始めます。
+あとは市民が `/citizen register` で登録し（管理者が `/admin citizen register role:@ロール` でまとめて登録することもできます）、`/election manage start kind:総選挙` で最初の選挙を告示すれば国が動き始めます。
 
 > **Bot のロール順位**: Bot は自分より下のロールしか付与できません。サーバー設定で Bot のロールを役職ロールより上に置いてください（`/admin diagnose` で確認できます）。
 
