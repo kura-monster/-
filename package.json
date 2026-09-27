@@ -1,0 +1,31 @@
+{
+  "name": "democracy-bot",
+  "version": "1.0.0",
+  "description": "Discord鯖を民主主義で運営するBot",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "dev:bot": "tsx src/bot/index.ts",
+    "deploy-commands": "tsx src/bot/deploy-commands.ts",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "discord.js": "^14.16.0",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/express-session": "^1.18.0",
+    "@types/node": "^22.0.0",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

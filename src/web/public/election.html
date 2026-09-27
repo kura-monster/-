@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>投票 - 民主主義Bot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>🏛️ 民主主義Bot</h1>
+    <nav>
+      <a href="/dashboard">ダッシュボード</a>
+      <div id="user-area"></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div id="login-required" style="display:none" class="login-container">
+      <div class="empty-icon">🗳️</div>
+      <h1>投票するにはログインが必要です</h1>
+      <a href="/auth/login" class="btn btn-primary">Discordでログイン</a>
+    </div>
+
+    <div id="election-content" style="display:none">
+      <div class="card" id="election-card"></div>
+    </div>
+
+    <div id="loading" class="empty">
+      <div class="empty-icon">⏳</div>
+      <p>読み込み中...</p>
+    </div>
+  </div>
+
+  <script>
+    const electionId = window.location.pathname.split("/").pop();
+    let selectedCandidateId = null;
+
+    const STATUS_LABELS = {
+      REGISTRATION: "立候補受付中", VOTING: "投票中", COMPLETED: "終了", CANCELLED: "中止",
+    };
+
+    async function init() {
+      const res = await fetch(`/auth/user-info`);
+      if (!res.ok) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("login-required").style.display = "flex";
+        return;
+      }
+
+      const user = await res.json();
+      renderUserArea(user);
+      await loadElection();
+    }
+
+    function renderUserArea(user) {
+      const area = document.getElementById("user-area");
+      const avatar = user.avatar
+        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`
+        : "https://cdn.discordapp.com/embed/avatars/0.png";
+      area.innerHTML = `
+        <span class="user-info"><img src="${avatar}" class="user-avatar" alt="">${user.username}</span>
+        <a href="/auth/logout">ログアウト</a>
+      `;
+    }
+
+    async function loadElection() {
+      const guildIdMatch = document.cookie.match(/last_guild=([^;]+)/);
+
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("election-content").style.display = "block";
+
+      const card = document.getElementById("election-card");
+
+      // Attempt to load the election details from any guild that has this election
+      // For now, show a direct election view
+      card.innerHTML = `
+        <h2>🗳️ 投票ページ</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          選挙ID: <code>${electionId}</code>
+        </p>
+        <p>このページはDiscordのボタンから遷移して投票するためのページです。</p>
+        <p style="margin-top:8px"><a href="/dashboard" class="btn btn-outline">ダッシュボードへ戻る</a></p>
+      `;
+    }
+
+    init();
+  </script>
+</body>
+</html>

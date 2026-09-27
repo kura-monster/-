@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>民主主義Bot - ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>🏛️ 民主主義Bot</h1>
+    <nav>
+      <a href="/dashboard">ダッシュボード</a>
+      <div id="user-area"></div>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div id="login-prompt" class="login-container" style="display:none">
+      <div class="empty-icon">🏛️</div>
+      <h1>民主主義Bot</h1>
+      <p>Discord鯖を民主主義で運営するためのシステムです</p>
+      <a href="/auth/login" class="btn btn-primary">Discordでログイン</a>
+    </div>
+
+    <div id="main-content" style="display:none">
+      <div id="guild-selector" class="guild-selector"></div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="government">政府構成</button>
+        <button class="tab" data-tab="election">選挙</button>
+        <button class="tab" data-tab="proposals">政策提案</button>
+        <button class="tab" data-tab="trials">裁判</button>
+      </div>
+
+      <div id="tab-government" class="tab-content active"></div>
+      <div id="tab-election" class="tab-content"></div>
+      <div id="tab-proposals" class="tab-content"></div>
+      <div id="tab-trials" class="tab-content"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentGuildId = null;
+    let userInfo = null;
+
+    const STATUS_LABELS = {
+      REGISTRATION: "立候補受付中", VOTING: "投票中", COMPLETED: "終了", CANCELLED: "中止",
+      DISCUSSION: "議論中", APPROVED: "承認", REJECTED: "否決", IMPLEMENTED: "実施済",
+      FILED: "提訴", IN_PROGRESS: "審理中", VERDICT: "判決", CLOSED: "終結",
+    };
+    const STATUS_BADGES = {
+      REGISTRATION: "badge-registration", VOTING: "badge-voting", COMPLETED: "badge-completed",
+      DISCUSSION: "badge-discussion", APPROVED: "badge-approved", REJECTED: "badge-rejected",
+    };
+
+    async function init() {
+      try {
+        const res = await fetch("/api/guilds/check-session");
+        if (res.status === 401) {
+          document.getElementById("login-prompt").style.display = "flex";
+          return;
+        }
+      } catch {}
+
+      const cookies = document.cookie;
+      document.getElementById("main-content").style.display = "block";
+
+      const res = await fetch("/auth/user-info");
+      if (res.ok) {
+        userInfo = await res.json();
+        renderUserArea();
+        renderGuildSelector();
+      } else {
+        document.getElementById("login-prompt").style.display = "flex";
+      }
+    }
+
+    function renderUserArea() {
+      const area = document.getElementById("user-area");
+      if (!userInfo) {
+        area.innerHTML = '<a href="/auth/login" class="btn btn-sm btn-primary">ログイン</a>';
+        return;
+      }
+      const avatar = userInfo.avatar
+        ? `https://cdn.discordapp.com/avatars/${userInfo.id}/${userInfo.avatar}.png?size=32`
+        : "https://cdn.discordapp.com/embed/avatars/0.png";
+      area.innerHTML = `
+        <span class="user-info">
+          <img src="${avatar}" class="user-avatar" alt="">
+          ${userInfo.username}
+        </span>
+        <a href="/auth/logout">ログアウト</a>
+      `;
+    }
+
+    function renderGuildSelector() {
+      const container = document.getElementById("guild-selector");
+      if (!userInfo?.guilds?.length) {
+        container.innerHTML = '<p style="color:var(--text-muted)">参加中のサーバーがありません</p>';
+        return;
+      }
+
+      container.innerHTML = userInfo.guilds
+        .map(g => `<button class="guild-btn" data-id="${g.id}">${g.name}</button>`)
+        .join("");
+
+      container.querySelectorAll(".guild-btn").forEach(btn => {
+        btn.addEventListener("click", () => selectGuild(btn.dataset.id));
+      });
+
+      selectGuild(userInfo.guilds[0].id);
+    }
+
+    function selectGuild(guildId) {
+      currentGuildId = guildId;
+      document.querySelectorAll(".guild-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.id === guildId);
+      });
+      loadAllTabs();
+    }
+
+    async function loadAllTabs() {
+      await Promise.all([loadGovernment(), loadElection(), loadProposals(), loadTrials()]);
+    }
+
+    async function loadGovernment() {
+      const container = document.getElementById("tab-government");
+      try {
+        const res = await fetch(`/api/guilds/${currentGuildId}/government`);
+        const data = await res.json();
+
+        const renderGroup = (title, emoji, positions) => {
+          if (!positions?.length) return `
+            <div class="position-group">
+              <h3>${emoji} ${title}</h3>
+              <div class="position-member"><span style="color:var(--text-muted)">なし</span></div>
+            </div>`;
+          return `
+            <div class="position-group">
+              <h3>${emoji} ${title} [${positions.length}名]</h3>
+              ${positions.map(p => `
+                <div class="position-member">
+                  <span>${p.citizen.discordId}</span>
+                  <span class="position-title">${p.title}</span>
+                </div>`).join("")}
+            </div>`;
+        };
+
+        container.innerHTML = `
+          <div class="card">
+            <h2>🏛️ ${data.guildName} 政府構成</h2>
+            <div class="faction">
+              <div class="faction-header">管理者派閥</div>
+              <div class="position-group">
+                <div class="position-member"><span>サーバー管理者・オーナー</span></div>
+              </div>
+            </div>
+            <div class="faction">
+              <div class="faction-header">国民代表派閥</div>
+              ${renderGroup("国民代表（議員）", "🏛️", data.representatives)}
+              ${renderGroup("大臣", "👔", data.ministers)}
+              ${renderGroup("補佐官", "📎", data.aides)}
+              ${renderGroup("裁判官", "⚖️", data.judges)}
+            </div>
+          </div>`;
+      } catch {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">🏛️</div><p>政府情報を読み込めませんでした</p></div>';
+      }
+    }
+
+    async function loadElection() {
+      const container = document.getElementById("tab-election");
+      try {
+        const res = await fetch(`/api/guilds/${currentGuildId}/election`);
+        const data = await res.json();
+
+        if (!data.election) {
+          container.innerHTML = '<div class="empty"><div class="empty-icon">🗳️</div><p>現在進行中の選挙はありません</p></div>';
+          return;
+        }
+
+        const e = data.election;
+        const statusLabel = STATUS_LABELS[e.status] || e.status;
+        const badgeClass = STATUS_BADGES[e.status] || "";
+
+        container.innerHTML = `
+          <div class="card">
+            <h2>🗳️ ${e.title} <span class="badge ${badgeClass}">${statusLabel}</span></h2>
+            ${e.description ? `<p style="color:var(--text-muted);margin-bottom:16px">${e.description}</p>` : ""}
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">
+              当選枠: ${e.seats}名 | 投票締切: ${new Date(e.votingEnd).toLocaleString("ja-JP")}
+            </p>
+            ${data.hasVoted ? '<div class="alert alert-success">投票済みです</div>' : ""}
+            <div class="candidates-list" id="candidates-list">
+              ${e.candidates.map(c => `
+                <div class="candidate-card ${data.hasVoted ? "" : ""}" data-id="${c.id}" onclick="${e.status === "VOTING" && !data.hasVoted ? `selectCandidate('${c.id}')` : ""}">
+                  <div class="candidate-info">
+                    <div class="candidate-name">${c.discordId}</div>
+                    ${c.manifesto ? `<div class="candidate-manifesto">公約: ${c.manifesto}</div>` : ""}
+                  </div>
+                  <div class="candidate-votes">${c.voteCount}票</div>
+                </div>`).join("")}
+            </div>
+            ${e.status === "VOTING" && !data.hasVoted ? `
+              <div style="margin-top:16px;text-align:center">
+                <button class="btn btn-primary" id="vote-btn" disabled onclick="submitVote()">投票する</button>
+              </div>` : ""}
+          </div>`;
+      } catch {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">🗳️</div><p>選挙情報を読み込めませんでした</p></div>';
+      }
+    }
+
+    let selectedCandidateId = null;
+
+    function selectCandidate(candidateId) {
+      selectedCandidateId = candidateId;
+      document.querySelectorAll(".candidate-card").forEach(card => {
+        card.classList.toggle("selected", card.dataset.id === candidateId);
+      });
+      const btn = document.getElementById("vote-btn");
+      if (btn) btn.disabled = false;
+    }
+
+    async function submitVote() {
+      if (!selectedCandidateId) return;
+      const btn = document.getElementById("vote-btn");
+      btn.disabled = true;
+      btn.textContent = "投票中...";
+
+      try {
+        const res = await fetch(`/api/guilds/${currentGuildId}/election/vote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidateId: selectedCandidateId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadElection();
+        } else {
+          alert(data.error || "投票に失敗しました");
+          btn.disabled = false;
+          btn.textContent = "投票する";
+        }
+      } catch {
+        alert("投票に失敗しました");
+        btn.disabled = false;
+        btn.textContent = "投票する";
+      }
+    }
+
+    async function loadProposals() {
+      const container = document.getElementById("tab-proposals");
+      try {
+        const res = await fetch(`/api/guilds/${currentGuildId}/proposals`);
+        const data = await res.json();
+
+        if (!data.proposals?.length) {
+          container.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>政策提案はありません</p></div>';
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="card">
+            <h2>📋 政策提案一覧</h2>
+            ${data.proposals.map(p => {
+              const forV = p.votes.filter(v => v.inFavor).length;
+              const againstV = p.votes.filter(v => !v.inFavor).length;
+              const statusLabel = STATUS_LABELS[p.status] || p.status;
+              const badgeClass = STATUS_BADGES[p.status] || "";
+              return `
+                <div class="item-row">
+                  <div>
+                    <div class="item-title">${p.title} <span class="badge ${badgeClass}">${statusLabel}</span></div>
+                    <div class="item-meta">提案者: ${p.proposer.discordId} | 賛成:${forV} 反対:${againstV}</div>
+                  </div>
+                </div>`;
+            }).join("")}
+          </div>`;
+      } catch {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>提案情報を読み込めませんでした</p></div>';
+      }
+    }
+
+    async function loadTrials() {
+      const container = document.getElementById("tab-trials");
+      try {
+        const res = await fetch(`/api/guilds/${currentGuildId}/trials`);
+        const data = await res.json();
+
+        if (!data.trials?.length) {
+          container.innerHTML = '<div class="empty"><div class="empty-icon">⚖️</div><p>裁判記録はありません</p></div>';
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="card">
+            <h2>⚖️ 裁判記録</h2>
+            ${data.trials.map(t => {
+              const statusLabel = STATUS_LABELS[t.status] || t.status;
+              return `
+                <div class="item-row">
+                  <div>
+                    <div class="item-title">${t.title} <span class="badge">${statusLabel}</span></div>
+                    <div class="item-meta">
+                      原告: ${t.plaintiff.discordId} vs 被告: ${t.defendant.discordId}
+                      ${t.judge ? `| 裁判官: ${t.judge.discordId}` : ""}
+                    </div>
+                    ${t.verdict ? `<div class="item-meta" style="color:var(--success)">判決: ${t.verdict}</div>` : ""}
+                  </div>
+                </div>`;
+            }).join("")}
+          </div>`;
+      } catch {
+        container.innerHTML = '<div class="empty"><div class="empty-icon">⚖️</div><p>裁判情報を読み込めませんでした</p></div>';
+      }
+    }
+
+    // Tab switching
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
+      });
+    });
+
+    init();
+  </script>
+</body>
+</html>

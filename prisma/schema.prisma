@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Guild {
+  id                 String   @id // Discord guild ID
+  name               String
+  electionChannelId  String?
+  debateChannelId    String?
+  courtChannelId     String?
+  announceChannelId  String?
+  termLengthDays     Int      @default(30)
+  maxRepresentatives Int      @default(5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  citizens  Citizen[]
+  elections Election[]
+  positions Position[]
+  proposals Proposal[]
+  trials    Trial[]
+}
+
+model Citizen {
+  id        String   @id @default(cuid())
+  discordId String
+  guildId   String
+  guild     Guild    @relation(fields: [guildId], references: [id])
+  joinedAt  DateTime @default(now())
+
+  positions     Position[]
+  candidacies   Candidate[]
+  votes         Vote[]
+  proposalsMade Proposal[]     @relation("proposer")
+  proposalVotes ProposalVote[]
+  trialsFiled   Trial[]        @relation("plaintiff")
+  trialsAgainst Trial[]        @relation("defendant")
+  trialsJudged  Trial[]        @relation("judge")
+
+  @@unique([discordId, guildId])
+}
+
+// REPRESENTATIVE=議員, MINISTER=大臣, AIDE=補佐官, JUDGE=裁判官
+model Position {
+  id        String   @id @default(cuid())
+  type      String // REPRESENTATIVE | MINISTER | AIDE | JUDGE
+  title     String
+  citizenId String
+  citizen   Citizen  @relation(fields: [citizenId], references: [id])
+  guildId   String
+  guild     Guild    @relation(fields: [guildId], references: [id])
+  appointedAt DateTime @default(now())
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  appointedById String?
+}
+
+// REGISTRATION=立候補受付, VOTING=投票中, COMPLETED=終了, CANCELLED=中止
+model Election {
+  id                String   @id @default(cuid())
+  guildId           String
+  guild             Guild    @relation(fields: [guildId], references: [id])
+  title             String
+  description       String?
+  status            String   @default("REGISTRATION")
+  seats             Int      @default(1)
+  registrationStart DateTime
+  registrationEnd   DateTime
+  votingStart       DateTime
+  votingEnd         DateTime
+  createdAt         DateTime @default(now())
+
+  candidates Candidate[]
+  votes      Vote[]
+}
+
+model Candidate {
+  id           String   @id @default(cuid())
+  electionId   String
+  election     Election @relation(fields: [electionId], references: [id])
+  citizenId    String
+  citizen      Citizen  @relation(fields: [citizenId], references: [id])
+  manifesto    String?
+  registeredAt DateTime @default(now())
+
+  votes Vote[]
+
+  @@unique([electionId, citizenId])
+}
+
+model Vote {
+  id          String   @id @default(cuid())
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id])
+  citizenId   String
+  citizen     Citizen  @relation(fields: [citizenId], references: [id])
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  votedAt     DateTime  @default(now())
+
+  @@unique([electionId, citizenId])
+}
+
+// DISCUSSION=議論中, VOTING=投票中, APPROVED=承認, REJECTED=否決, IMPLEMENTED=実施済
+model Proposal {
+  id         String   @id @default(cuid())
+  guildId    String
+  guild      Guild    @relation(fields: [guildId], references: [id])
+  proposerId String
+  proposer   Citizen  @relation("proposer", fields: [proposerId], references: [id])
+  title      String
+  content    String
+  status     String   @default("DISCUSSION")
+  votingStart DateTime?
+  votingEnd   DateTime?
+  createdAt   DateTime @default(now())
+
+  votes ProposalVote[]
+}
+
+model ProposalVote {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id])
+  citizenId  String
+  citizen    Citizen  @relation(fields: [citizenId], references: [id])
+  inFavor    Boolean
+  reason     String?
+  votedAt    DateTime @default(now())
+
+  @@unique([proposalId, citizenId])
+}
+
+// FILED=提訴, IN_PROGRESS=審理中, VERDICT=判決, CLOSED=終結
+model Trial {
+  id          String   @id @default(cuid())
+  guildId     String
+  guild       Guild    @relation(fields: [guildId], references: [id])
+  plaintiffId String
+  plaintiff   Citizen  @relation("plaintiff", fields: [plaintiffId], references: [id])
+  defendantId String
+  defendant   Citizen  @relation("defendant", fields: [defendantId], references: [id])
+  judgeId     String?
+  judge       Citizen? @relation("judge", fields: [judgeId], references: [id])
+  title       String
+  description String
+  verdict     String?
+  status      String   @default("FILED")
+  filedAt     DateTime @default(now())
+  closedAt    DateTime?
+}
