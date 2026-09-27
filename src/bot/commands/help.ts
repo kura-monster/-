@@ -64,7 +64,8 @@ const SECTIONS: Section[] = [
     title: "管理者専用（/admin はDiscordの管理者にだけ表示されます）",
     adminOnly: true,
     lines: [
-      "`/admin setup` 初期設定　`/admin sync` ロール同期　`/admin diagnose` 診断　`/admin settings` 制度の変更",
+      "`/admin autosetup` チャンネル・権限・ロールまでまとめて自動設定　`/admin setup` チャンネルを指定して初期設定",
+      "`/admin sync` ロール同期　`/admin diagnose` 診断　`/admin settings` 制度の変更",
       "`/admin appoint | dismiss` 元首・管理官・最高裁判所長官・選挙管理委員の任命／罷免",
       "`/admin bill sanction | veto` 可決法案の裁可・拒否権",
       "`/admin dissolve` 議会の解散　`/admin citizen revoke | restore` 市民権の停止／回復",

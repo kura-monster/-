@@ -14,6 +14,7 @@ export async function diagnose(guild: Guild): Promise<string[]> {
 
   check(me.permissions.has(P.ManageRoles), "ロールの管理", "役職ロールを付与できません");
   check(me.permissions.has(P.ModerateMembers), "メンバーのタイムアウト", "判決（タイムアウト）を執行できません");
+  check(me.permissions.has(P.ManageChannels), "チャンネルの管理", "`/admin autosetup` でチャンネルを作成できません");
   const grantable = [P.ManageEvents, P.PrioritySpeaker, P.MentionEveryone, P.ManageThreads];
   check(
     grantable.every((bit) => me.permissions.has(bit)),

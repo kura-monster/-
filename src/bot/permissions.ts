@@ -1,11 +1,13 @@
 import { PermissionFlagsBits } from "discord.js";
 
 /**
- * What the bot needs: managing roles and timing out members, posting to channels and threads,
- * plus every permission it grants to the roles it creates (Discord only lets a bot grant what it has).
+ * What the bot needs: managing roles and timing out members, creating channels (/admin autosetup),
+ * posting to channels and threads, plus every permission it grants to the roles it creates
+ * (Discord only lets a bot grant what it has).
  */
 export const REQUIRED_BOT_PERMISSIONS = [
   PermissionFlagsBits.ManageRoles,
+  PermissionFlagsBits.ManageChannels,
   PermissionFlagsBits.ModerateMembers,
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.SendMessages,

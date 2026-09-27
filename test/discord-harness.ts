@@ -127,13 +127,20 @@ function flatten(payload: unknown): Reply {
   return { text, ephemeral: Boolean((p.flags ?? 0) & 64), error: (p.content ?? "").startsWith(ERROR_PREFIX) };
 }
 
-export async function run(person: FakePerson, commandName: string, route: string, values: Record<string, Value> = {}): Promise<Reply> {
+export async function run(
+  person: FakePerson,
+  commandName: string,
+  route: string,
+  values: Record<string, Value> = {},
+  options: { guild?: { id: string; name: string } } = {},
+): Promise<Reply> {
   const replies: Reply[] = [];
   const member = fakeMember(person);
+  const guild = options.guild ?? { id: GUILD, name: "テスト国" };
   const interaction = {
     commandName,
-    guildId: GUILD,
-    guild: { id: GUILD, name: "テスト国" },
+    guildId: guild.id,
+    guild,
     user: member.user,
     member,
     memberPermissions: member.permissions,

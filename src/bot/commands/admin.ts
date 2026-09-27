@@ -21,12 +21,24 @@ import {
   type AdminAppointable,
 } from "../../services/admin";
 import { restoreCitizenship } from "../../services/citizen";
+import { startElection } from "../../services/election";
 import { formatSetting, getGuild, settingField, updateChannels, updateSettings, type SettingKey, type SettingsInput } from "../../services/guild";
-import { holderOf } from "../../services/positions";
-import { actorFrom, identityOf, targetOf } from "../context";
+import { actorFrom, targetOf } from "../context";
 import { diagnose } from "../diagnostics";
 import { ensureManagedRoles, syncAllMembers } from "../roles";
-import { COLOR, embed, field, limitLines, mention, replyEmbed, withRelative } from "../ui";
+import {
+  CATEGORY_NAME,
+  DEBATER_KEYS,
+  appointOwnerAsSovereign,
+  channelSettingsOf,
+  ensureCountryChannels,
+  missingForAutoSetup,
+  planChannels,
+  postWelcome,
+  syncRolesReport,
+  welcomeEmbed,
+} from "../setup";
+import { COLOR, embed, field, limitLines, linkRow, mention, replyEmbed, withRelative } from "../ui";
 import { suggestBills } from "./autocomplete";
 import { routeOf, type BotCommand } from "./types";
 
@@ -85,6 +97,12 @@ export const adminCommand: BotCommand = {
             .setDescription("投票開始を案内するチャンネル（省略時は官報チャンネル）")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
         ),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("autosetup")
+        .setDescription("オートセットアップ: チャンネル・権限・役職ロール・元首・案内をまとめて自動で設定する")
+        .addBooleanOption((o) => o.setName("first_election").setDescription("最初の総選挙もすぐに告示する（省略時はしない）")),
     )
     .addSubcommand((s) => s.setName("sync").setDescription("役職ロールを再作成し、全メンバーのロールを同期する"))
     .addSubcommand((s) => s.setName("diagnose").setDescription("Botの権限・ロール順位・チャンネル設定を診断する"))
@@ -168,26 +186,8 @@ export const adminCommand: BotCommand = {
           electionChannelId: channel("election_channel"),
         });
         const roles = await ensureManagedRoles(interaction.guild);
-
-        let sovereign: string;
-        const current = await holderOf(prisma, actor.guildId, "SOVEREIGN");
-        if (current) {
-          sovereign = `${mention(current.citizen.discordId)}（在任中）`;
-        } else {
-          const owner = await interaction.guild.fetchOwner();
-          try {
-            await adminAppoint(actor, "SOVEREIGN", { ...identityOf(owner.user, owner), isDiscordAdmin: true });
-            sovereign = `サーバーオーナー ${mention(owner.id)} を ${roleTag("元首")} に任命しました`;
-          } catch (error) {
-            if (!(error instanceof DomainError)) throw error;
-            sovereign = `未任命（${error.message}）`;
-          }
-        }
-
-        const sync = await syncAllMembers(interaction.guild).catch((error: unknown) => ({
-          synced: 0,
-          errors: [`メンバー一覧を取得できませんでした（Developer Portal で SERVER MEMBERS INTENT を有効にしてください）: ${String(error)}`],
-        }));
+        const sovereign = await appointOwnerAsSovereign(interaction.guild, actor);
+        const sync = await syncRolesReport(interaction.guild);
         const checks = await diagnose(interaction.guild);
         const show = (id: string | null) => (id ? `<#${id}>` : "未設定");
 
@@ -211,7 +211,7 @@ export const adminCommand: BotCommand = {
               ].join("\n"),
             ),
             field(roleTag("元首"), sovereign),
-            field("ロール同期", [`${sync.synced}名を同期`, ...sync.errors.map((e) => `\`失敗\` ${e}`)].join("\n")),
+            field("ロール同期", sync),
             field("診断", limitLines(checks)),
             field(
               "次のステップ",
@@ -223,6 +223,83 @@ export const adminCommand: BotCommand = {
               ].join("\n"),
             ),
           );
+        await replyEmbed(interaction, body);
+        return;
+      }
+
+      case "autosetup": {
+        await interaction.deferReply();
+        const guild = interaction.guild;
+        const me = guild.members.me ?? (await guild.members.fetchMe());
+        const lacking = missingForAutoSetup(me.permissions);
+        if (lacking.length > 0) {
+          fail(`Bot に「${lacking.join("」「")}」の権限がありません。サーバー設定で Bot のロールに付与するか、起動ログの招待URLから Bot を招待し直してください。`);
+        }
+
+        const roles = await ensureManagedRoles(guild);
+        const managed = await prisma.managedRole.findMany({ where: { guildId: guild.id } });
+        const roleOf = (key: string) => managed.find((r) => r.key === key)?.roleId;
+        const plans = planChannels({
+          everyone: guild.roles.everyone.id,
+          bot: me.id,
+          citizen: roleOf("CITIZEN"),
+          debaters: DEBATER_KEYS.map(roleOf).filter((id): id is string => Boolean(id)),
+        });
+        const configured = channelSettingsOf(await getGuild(prisma, actor.guildId));
+        const channels = await ensureCountryChannels(guild, configured, plans);
+        const settings = channelSettingsOf(
+          await updateChannels(actor, Object.fromEntries(channels.outcomes.flatMap((o) => (o.channelId ? [[o.plan.slot, o.channelId]] : [])))),
+        );
+        const sovereign = await appointOwnerAsSovereign(guild, actor);
+        const sync = await syncRolesReport(guild);
+
+        const announce = channels.outcomes.find((o) => o.plan.slot === "announceChannelId");
+        const announceChannel = announce?.channelId ? guild.channels.cache.get(announce.channelId) : undefined;
+        const welcome =
+          announce?.status === "created" && announceChannel?.isTextBased()
+            ? await postWelcome(announceChannel, welcomeEmbed(guild, settings), [linkRow("Webダッシュボードを開く", `/g/${guild.id}`)])
+            : "官報チャンネルが既存のため投稿していません";
+
+        let election: string | null = null;
+        if (interaction.options.getBoolean("first_election")) {
+          try {
+            const started = await startElection(actor, { kind: "GENERAL" });
+            election = `${started.title}を告示しました（立候補の締切: ${withRelative(started.registrationEndsAt)}）`;
+          } catch (error) {
+            if (!(error instanceof DomainError)) throw error;
+            election = `告示しませんでした（${error.message}）`;
+          }
+        }
+        const checks = await diagnose(guild);
+
+        const STATUS = { created: "作成", existing: "既存" } as const;
+        const channelLines = [
+          `カテゴリー: ${CATEGORY_NAME}（${channels.categoryCreated ? "作成" : channels.category ? "既存" : "なし"}）`,
+          ...channels.outcomes.map((o) =>
+            o.status === "failed" ? `\`失敗\` ${o.plan.name}: ${o.error}` : `${o.plan.name}: <#${o.channelId}>（${STATUS[o.status]}）`,
+          ),
+        ];
+        const body = embed(COLOR.admin, "民主主義Bot｜オートセットアップ").addFields(
+          field("チャンネル", channelLines.join("\n")),
+          field(
+            "役職ロール",
+            [`作成: ${roles.created.length > 0 ? roles.created.join("、") : "なし"}`, `既存: ${roles.existing}件`, ...roles.failed.map((f) => `\`失敗\` ${f}`)].join("\n"),
+          ),
+          field(roleTag("元首"), sovereign),
+          field("ロール同期", sync),
+          field("はじめにの案内", welcome),
+          ...(election ? [field("総選挙", election)] : []),
+          field("診断", limitLines(checks)),
+          field(
+            "次のステップ",
+            [
+              "1. 市民に `/citizen register` で登録してもらう（参加方法は官報の案内に掲載）",
+              ...(election ? [] : ["2. `/election manage start kind:総選挙` で最初の選挙を告示"]),
+              "・必要に応じて `/admin appoint` で最高裁判所長官・選挙管理委員長を任命",
+              "・`/admin settings` で議員定数や任期を調整",
+            ].join("\n"),
+          ),
+        );
         await replyEmbed(interaction, body);
         return;
       }
